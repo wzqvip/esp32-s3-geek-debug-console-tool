@@ -32,6 +32,12 @@ Plugged into a Target Linux machine's USB-A port, this dongle instantly creates 
 - **No Physical Button Holding or Cable Re-plugging**: Due to the enclosed case of the ESP32-S3-GEEK, entering download mode manually is cumbersome.
 - **Menu-Driven DFU**: Selecting `5. Enter Download Mode` softly detaches USB, sets `RTC_CNTL_FORCE_DOWNLOAD_BOOT` in the RTC controller, and restarts straight into the ESP32-S3 ROM bootloader (`COM40`). The host PC can flash immediately via `idf.py flash`!
 
+### 6. MicroSD (TF) Card Full CLI Session Logging & Web File Manager
+- **Native 4-bit SDMMC Driver**: High-speed communication with FATFS mounted at `/sdcard/logs/` using native ESP32-S3 SDMMC Slot 1 with 1-bit auto-fallback.
+- **Automatic Multi-Session File Isolation**: Each reboot or manual session trigger creates an isolated file (`session_001.log`, `session_002.log`...) with standard session headers.
+- **Bi-Directional Command Capture**: Logs both Host input `[TX -> Host]` and Target Linux shell/kernel panic output `[RX <- Target]` through an async non-blocking queue.
+- **Interactive Web Log Explorer**: Access `http://192.168.4.1` in your browser to view logs directly in an in-browser modal, download `.log` files to your PC, or delete old logs.
+
 ---
 
 ## 🛠️ Hardware Specifications & Pinout
@@ -49,6 +55,12 @@ The project is customized specifically for the **Waveshare ESP32-S3-GEEK** (ESP3
 | **Button** | BOOT Key | **GPIO 0**  | Active Low, internal pull-up enabled |
 | **USB** | Native USB OTG | **GPIO 19** | USB D- (Data Minus) |
 | | | **GPIO 20** | USB D+ (Data Plus) |
+| **MicroSD / TF** | 4-bit SDMMC Slot 1 | **GPIO 36** | SDMMC CLK |
+| | FATFS on `/sdcard` | **GPIO 35** | SDMMC CMD |
+| | | **GPIO 37** | SDMMC Data 0 (D0) |
+| | | **GPIO 33** | SDMMC Data 1 (D1) |
+| | | **GPIO 38** | SDMMC Data 2 (D2) |
+| | | **GPIO 34** | SDMMC Data 3 (D3) |
 
 ---
 

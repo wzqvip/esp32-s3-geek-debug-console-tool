@@ -11,7 +11,9 @@
 | **Phase 1** | **硬件底层、按键状态机与 1.14" LCD UI** | ✅ **已完成** | 100% | 驱动适配、20ms 消抖、短按循环、长按进度条蓄力与确认已实机烧录验证通过 |
 | **Phase 2** | **TinyUSB 复合设备与动态重枚举** | ✅ **已完成** | 100% | CDC-ACM (COM41) + CDC-NCM (以太网 24) 复合设备在线，实测 12Mbps 链路与串口回环 |
 | **Phase 3** | **Wi-Fi Web配网、回退保护与下载模式** | ✅ **已完成** | 100% | AP热点(GEEK-Debugger 88%信号)、Web配网后台、自动回退机制、设置菜单内一键进入ROM下载模式实机测试通过 |
-| **Phase 4** | **嵌入式 WebShell 与无线控制台** | 🟡 **进行中** | 20% | WebSocket 串口双向透传 (xterm.js)、网页控制台与网络数据帧转发 |
+| **Phase 4** | **TF 卡全量会话日志与 Web 文件管理器** | ✅ **已完成** | 100% | 4线原生SDMMC(CLK:36,CMD:35,D0~3:37/33/38/34)、多Session自动分文件、双向命令捕获、Web端日志查看/下载/删除、4MB大分区支持 |
+| **Phase 5** | **嵌入式 WebShell 与无线控制台** | 🟡 **进行中** | 20% | WebSocket 串口双向透传 (xterm.js)、网页控制台与网络数据帧转发 |
+
 
 ---
 
@@ -82,7 +84,37 @@
 
 ---
 
-## 阶段四：嵌入式 WebShell 与无线控制台 (Phase 4) - 🟡 [当前推进]
+## 阶段四：TF 卡全量会话日志与 Web 文件管理器 (Phase 4) - ✅ [已完成]
+- [x] **TF 卡底层驱动与 FATFS 文件系统 (`components/sd_logger`)**
+  - [x] 基于 ESP32-S3 原生 SDMMC Slot 1 高速 4 线驱动（CLK: 36, CMD: 35, D0: 37, D1: 33, D2: 38, D3: 34）
+  - [x] 智能自适应总线：优先 4-bit 挂载，异常时自动降级 1-bit，无卡插入时安全容错不阻塞系统
+  - [x] 挂载 `/sdcard` 并自动创建 `/sdcard/logs` 目录
+  - [x] 获取并更新存储卡容量（总空间、剩余可用空间）
+- [x] **独立会话文件管理 (Session File Management)**
+  - [x] 自动扫描历史日志文件编号，递增创建 `session_001.log`, `session_002.log`...
+  - [x] 写入标准化 Session 元数据文件头（会话ID、开机毫秒、波特率、流格式）
+  - [x] 异步非阻塞写入队列（Ring Buffer），高波特率串口数据零丢包
+  - [x] 300ms 定期自动 `fflush()` 同步刷盘，拔电不丢数据
+- [x] **全量双向命令行交互记录**
+  - [x] 捕获 Host 敲入的命令输入：`[TX -> Host]`
+  - [x] 捕获 Target Linux 控制台与内核日志返回：`[RX <- Target]`
+- [x] **Web 端全功能日志管理器 (Web Log Explorer)**
+  - [x] 门户集成双选项卡（Wi-Fi 设置 / TF 卡会话日志）
+  - [x] `GET /api/logs/list`：动态获取文件清单、卡剩余空间
+  - [x] `GET /api/logs/view`：网页端弹窗直接预览日志文本内容
+  - [x] `GET /api/logs/download`：一键下载 `.log` 原始文件至电脑
+  - [x] `POST /api/logs/new_session`：网页端一键开启新会话
+  - [x] `POST /api/logs/delete`：清理废弃日志文件
+- [x] **ST7789 屏幕 UI 联动**
+  - [x] 仪表盘动态展示：`TF: 16GB OK Log:#001 (14K)`
+  - [x] 菜单新增：`6. TF: New Session`（一键切新会话）与 `7. TF: Flush & Eject`（安全弹出）
+- [x] **Flash 分区表扩展**
+  - [x] 针对 ESP32-S3-GEEK 16MB Flash 定制 `partitions.csv`
+  - [x] 将 App 运行分区从 1MB 扩大至 4MB（空闲率 76%），为后续 WebShell (xterm.js) 预留充裕空间
+
+---
+
+## 阶段五：嵌入式 WebShell 与无线控制台 (Phase 5) - 🟡 [当前推进]
 - [ ] **嵌入式 HTTP & WebSocket 终端服务 (`components/web_console`)**
   - [ ] 基于 `esp_http_server` 搭建轻量 Web 服务与 REST API
   - [ ] WebSocket 串口双向透传通道与 xterm.js 嵌入式终端
@@ -90,3 +122,4 @@
 - [ ] **lwIP 虚拟以太网桥接与 DHCP**
   - [ ] 为 Target 端 USB 虚拟网卡分配 IP（192.168.4.2）
   - [ ] 打通 USB 虚拟网卡与 Wi-Fi 的数据帧交换与 IP 转发 (NAPT)
+

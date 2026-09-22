@@ -1,5 +1,6 @@
 #include "net_bridge.h"
 #include "wifi_portal_html.h"
+#include "sd_logger.h"
 
 #include <string.h>
 #include <stdio.h>
@@ -239,12 +240,135 @@ static esp_err_t http_post_connect_handler(httpd_req_t *req)
     return httpd_resp_send(req, "{\"status\":\"ok\"}", HTTPD_RESP_USE_STRLEN);
 }
 
+/* -------------------- TF 卡日志管理 HTTP 接口 -------------------- */
+
+static esp_err_t http_get_logs_list_handler(httpd_req_t *req)
+{
+    httpd_resp_set_type(req, "application/json");
+    char *buf = (char *)malloc(3072);
+    if (!buf) {
+        httpd_resp_send_500(req);
+        return ESP_FAIL;
+    }
+    sd_logger_list_files_json(buf, 3072);
+    esp_err_t ret = httpd_resp_send(req, buf, HTTPD_RESP_USE_STRLEN);
+    free(buf);
+    return ret;
+}
+
+static esp_err_t http_get_logs_view_handler(httpd_req_t *req)
+{
+    char query[64] = {0};
+    char filename[32] = {0};
+    if (httpd_req_get_url_query_str(req, query, sizeof(query)) == ESP_OK) {
+        httpd_query_key_value(query, "file", filename, sizeof(filename));
+    }
+    if (filename[0] == '\0' || strstr(filename, "..") || strstr(filename, "/") || strstr(filename, "\\")) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid filename");
+        return ESP_FAIL;
+    }
+
+    char filepath[64];
+    snprintf(filepath, sizeof(filepath), "%s/%s", SD_LOGGER_LOGS_DIR, filename);
+    FILE *f = fopen(filepath, "r");
+    if (!f) {
+        httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "Log file not found");
+        return ESP_FAIL;
+    }
+
+    httpd_resp_set_type(req, "text/plain; charset=utf-8");
+    char *chunk = (char *)malloc(1024);
+    if (!chunk) {
+        fclose(f);
+        httpd_resp_send_500(req);
+        return ESP_FAIL;
+    }
+
+    size_t r = 0;
+    while ((r = fread(chunk, 1, 1024, f)) > 0) {
+        httpd_resp_send_chunk(req, chunk, r);
+    }
+    httpd_resp_send_chunk(req, NULL, 0);
+    free(chunk);
+    fclose(f);
+    return ESP_OK;
+}
+
+static esp_err_t http_get_logs_download_handler(httpd_req_t *req)
+{
+    char query[64] = {0};
+    char filename[32] = {0};
+    if (httpd_req_get_url_query_str(req, query, sizeof(query)) == ESP_OK) {
+        httpd_query_key_value(query, "file", filename, sizeof(filename));
+    }
+    if (filename[0] == '\0' || strstr(filename, "..") || strstr(filename, "/") || strstr(filename, "\\")) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid filename");
+        return ESP_FAIL;
+    }
+
+    char filepath[64];
+    snprintf(filepath, sizeof(filepath), "%s/%s", SD_LOGGER_LOGS_DIR, filename);
+    FILE *f = fopen(filepath, "rb");
+    if (!f) {
+        httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "Log file not found");
+        return ESP_FAIL;
+    }
+
+    httpd_resp_set_type(req, "application/octet-stream");
+    char header_disp[80];
+    snprintf(header_disp, sizeof(header_disp), "attachment; filename=\"%s\"", filename);
+    httpd_resp_set_hdr(req, "Content-Disposition", header_disp);
+
+    char *chunk = (char *)malloc(1024);
+    if (!chunk) {
+        fclose(f);
+        httpd_resp_send_500(req);
+        return ESP_FAIL;
+    }
+
+    size_t r = 0;
+    while ((r = fread(chunk, 1, 1024, f)) > 0) {
+        httpd_resp_send_chunk(req, chunk, r);
+    }
+    httpd_resp_send_chunk(req, NULL, 0);
+    free(chunk);
+    fclose(f);
+    return ESP_OK;
+}
+
+static esp_err_t http_post_logs_new_session_handler(httpd_req_t *req)
+{
+    sd_logger_start_new_session();
+    sd_logger_status_t st;
+    sd_logger_get_status(&st);
+
+    char resp[80];
+    snprintf(resp, sizeof(resp), "{\"success\":true,\"file\":\"%s\",\"id\":%lu}",
+             st.current_filename, (unsigned long)st.current_session_id);
+    httpd_resp_set_type(req, "application/json");
+    return httpd_resp_send(req, resp, HTTPD_RESP_USE_STRLEN);
+}
+
+static esp_err_t http_post_logs_delete_handler(httpd_req_t *req)
+{
+    char query[64] = {0};
+    char filename[32] = {0};
+    if (httpd_req_get_url_query_str(req, query, sizeof(query)) == ESP_OK) {
+        httpd_query_key_value(query, "file", filename, sizeof(filename));
+    }
+    if (filename[0] != '\0') {
+        sd_logger_delete_file(filename);
+    }
+    httpd_resp_set_type(req, "application/json");
+    return httpd_resp_send(req, "{\"success\":true}", HTTPD_RESP_USE_STRLEN);
+}
+
 static void start_http_server(void)
 {
     if (s_http_server) return;
 
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
-    config.max_uri_handlers = 8;
+    config.max_uri_handlers = 16;
     config.stack_size = 8192;
 
     if (httpd_start(&s_http_server, &config) == ESP_OK) {
@@ -276,7 +400,43 @@ static void start_http_server(void)
         };
         httpd_register_uri_handler(s_http_server, &uri_post_connect);
 
-        ESP_LOGI(TAG, "HTTP Portal Server started on port %d", config.server_port);
+        // TF 卡日志接口
+        httpd_uri_t uri_logs_list = {
+            .uri = "/api/logs/list",
+            .method = HTTP_GET,
+            .handler = http_get_logs_list_handler,
+        };
+        httpd_register_uri_handler(s_http_server, &uri_logs_list);
+
+        httpd_uri_t uri_logs_view = {
+            .uri = "/api/logs/view",
+            .method = HTTP_GET,
+            .handler = http_get_logs_view_handler,
+        };
+        httpd_register_uri_handler(s_http_server, &uri_logs_view);
+
+        httpd_uri_t uri_logs_download = {
+            .uri = "/api/logs/download",
+            .method = HTTP_GET,
+            .handler = http_get_logs_download_handler,
+        };
+        httpd_register_uri_handler(s_http_server, &uri_logs_download);
+
+        httpd_uri_t uri_logs_new = {
+            .uri = "/api/logs/new_session",
+            .method = HTTP_POST,
+            .handler = http_post_logs_new_session_handler,
+        };
+        httpd_register_uri_handler(s_http_server, &uri_logs_new);
+
+        httpd_uri_t uri_logs_del = {
+            .uri = "/api/logs/delete",
+            .method = HTTP_POST,
+            .handler = http_post_logs_delete_handler,
+        };
+        httpd_register_uri_handler(s_http_server, &uri_logs_del);
+
+        ESP_LOGI(TAG, "HTTP Portal Server started on port %d (with TF Log Manager)", config.server_port);
     }
 }
 

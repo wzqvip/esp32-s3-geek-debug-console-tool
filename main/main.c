@@ -10,6 +10,7 @@
 #include "display_ui.h"
 #include "usb_manager.h"
 #include "net_bridge.h"
+#include "sd_logger.h"
 #include "soc/rtc_cntl_reg.h"
 
 static const char *TAG = "APP_MAIN";
@@ -22,6 +23,32 @@ static const char *TAG = "APP_MAIN";
 #define GEEK_PIN_LCD_DC     8       // LCD DC (Data/Command)
 #define GEEK_PIN_LCD_RST    9       // LCD Reset
 #define GEEK_PIN_LCD_BL     7       // LCD Backlight
+
+// TF 卡 (MicroSD SDMMC Slot 1) 原生硬件引脚
+#define GEEK_PIN_SD_CLK     36      // SDMMC CLK
+#define GEEK_PIN_SD_CMD     35      // SDMMC CMD
+#define GEEK_PIN_SD_D0      37      // SDMMC Data 0
+#define GEEK_PIN_SD_D1      33      // SDMMC Data 1
+#define GEEK_PIN_SD_D2      38      // SDMMC Data 2
+#define GEEK_PIN_SD_D3      34      // SDMMC Data 3
+
+/**
+ * @brief 虚拟串口数据接收与全量 TF 卡会话日志记录
+ */
+static void app_serial_rx_handler(const uint8_t *data, size_t len, void *user_ctx)
+{
+    // 1. 将 Host 敲入发给 Target 的命令记录到当前 Session (TX)
+    sd_logger_log_tx(data, len);
+
+    // 2. 响应 Echo 回显给 Host
+    const char echo_header[] = "[ESP32-S3-GEEK Echo]: ";
+    usb_serial_write((const uint8_t *)echo_header, strlen(echo_header));
+    usb_serial_write(data, len);
+
+    // 3. 将 Target 回显与输出记录到当前 Session (RX)
+    sd_logger_log_rx((const uint8_t *)echo_header, strlen(echo_header));
+    sd_logger_log_rx(data, len);
+}
 
 /**
  * @brief 按键事件处理回调函数
@@ -89,6 +116,16 @@ static void app_mode_apply_handler(debugger_mode_t mode, void *user_ctx)
         esp_restart();
         break;
 
+    case DEBUGGER_OPT_SD_NEW_SESSION:
+        ESP_LOGI(TAG, "Action: Starting new TF Card Session file...");
+        sd_logger_start_new_session();
+        break;
+
+    case DEBUGGER_OPT_SD_EJECT:
+        ESP_LOGW(TAG, "Action: Flushing buffers & Ejecting TF Card...");
+        sd_logger_eject();
+        break;
+
     case DEBUGGER_OPT_REBOOT:
         ESP_LOGW(TAG, "Action: System Rebooting in 1 second...");
         vTaskDelay(pdMS_TO_TICKS(1000));
@@ -112,6 +149,10 @@ static ui_status_data_t s_current_ui_status = {
     .net_link_up = true,
     .rx_bytes_sec = 0,
     .tx_bytes_sec = 0,
+    .sd_mounted = false,
+    .sd_total_mb = 0,
+    .sd_session_id = 0,
+    .sd_file_bytes = 0,
 };
 
 static void app_wifi_state_handler(net_wifi_state_t state, const char *ssid, const char *ip_str, void *user_ctx)
@@ -157,6 +198,14 @@ static void status_monitor_task(void *pvParameters)
         // 动态更新网络吞吐起伏
         s_current_ui_status.rx_bytes_sec = 1024 * (10 + (counter % 12));
         s_current_ui_status.tx_bytes_sec = 1024 * (1 + (counter % 4));
+
+        // 动态更新 TF 卡状态
+        sd_logger_status_t sd_st;
+        sd_logger_get_status(&sd_st);
+        s_current_ui_status.sd_mounted = sd_st.card_mounted;
+        s_current_ui_status.sd_total_mb = sd_st.total_mb;
+        s_current_ui_status.sd_session_id = sd_st.current_session_id;
+        s_current_ui_status.sd_file_bytes = sd_st.current_file_bytes;
 
         display_ui_update_status(&s_current_ui_status);
         vTaskDelay(pdMS_TO_TICKS(1000));
@@ -215,10 +264,27 @@ void app_main(void)
         ESP_LOGI(TAG, "Button controller initialized on GPIO %d (Short:Next / Long:Confirm)", GEEK_PIN_KEY);
     }
 
-    // 4. 初始化 USB 复合设备 (TinyUSB CDC-ACM 串口 + CDC-NCM 虚拟网卡)
+    // 4. 初始化 TF 卡 (MicroSD) 与全量会话日志记录器
+    sd_logger_config_t sd_cfg = {
+        .pin_clk = GEEK_PIN_SD_CLK,
+        .pin_cmd = GEEK_PIN_SD_CMD,
+        .pin_d0  = GEEK_PIN_SD_D0,
+        .pin_d1  = GEEK_PIN_SD_D1,
+        .pin_d2  = GEEK_PIN_SD_D2,
+        .pin_d3  = GEEK_PIN_SD_D3,
+        .auto_new_session = true,
+    };
+    ret = sd_logger_init(&sd_cfg);
+    if (ret == ESP_OK) {
+        ESP_LOGI(TAG, "TF Card & Session Logger initialized successfully!");
+    } else {
+        ESP_LOGW(TAG, "TF Card not detected or failed to mount (%d), continuing in cardless mode", ret);
+    }
+
+    // 5. 初始化 USB 复合设备 (TinyUSB CDC-ACM 串口 + CDC-NCM 虚拟网卡)
     usb_manager_config_t usb_cfg = {
         .initial_mode = USB_MODE_COMPOSITE,
-        .on_serial_rx = NULL, // 默认开启 Echo 回环，便于上位机直接测试
+        .on_serial_rx = app_serial_rx_handler, // 自动全量捕获 TX/RX 并写入 TF 卡 Session 日志
         .on_net_rx = NULL,
     };
     ret = usb_manager_init(&usb_cfg);
@@ -228,7 +294,7 @@ void app_main(void)
         ESP_LOGI(TAG, "USB Manager initialized in COMPOSITE mode (CDC-ACM + CDC-NCM)");
     }
 
-    // 5. 初始化 Wi-Fi 管理器 (AP 配网热点 + STA 自动连接 + Fallback 回退保护)
+    // 6. 初始化 Wi-Fi 管理器 (AP 配网热点 + STA 自动连接 + Fallback 回退保护 + TF卡Web管理器)
     net_bridge_config_t net_cfg = {
         .ap_ssid = "GEEK-Debugger",
         .ap_password = NULL, // 免密热点，开箱即用连入配网
@@ -239,7 +305,7 @@ void app_main(void)
     if (ret != ESP_OK) {
         ESP_LOGE(TAG, "Net Bridge initialization failed: %d", ret);
     } else {
-        ESP_LOGI(TAG, "Net Bridge (Wi-Fi Portal) initialized successfully!");
+        ESP_LOGI(TAG, "Net Bridge (Wi-Fi Portal & Log Manager) initialized successfully!");
     }
 
     // 6. 启动状态监控心跳任务

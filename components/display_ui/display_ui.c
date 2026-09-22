@@ -35,6 +35,7 @@ static const char *TAG = "DISPLAY_UI";
 #define COLOR_LIGHTGREY   0xC618
 #define COLOR_DARKGREY    0x39E7
 #define COLOR_PURPLE      0x780F
+#define COLOR_MAGENTA     0xF81F
 #define COLOR_BLUE        0x001F
 
 static display_ui_config_t s_cfg;
@@ -56,7 +57,9 @@ static const char *s_menu_items[] = {
     "3. Pure Network (NCM)",
     "4. Wi-Fi: Reset to AP",
     "5. Enter Download Mode",
-    "6. System Reboot",
+    "6. TF: New Session",
+    "7. TF: Flush & Eject",
+    "8. System Reboot",
 };
 
 /* -------------------- 基础绘图函数 -------------------- */
@@ -185,8 +188,16 @@ static void render_dashboard(void)
     snprintf(line, sizeof(line), "Target IP: %s (usb0)", s_status_data.target_ip[0] ? s_status_data.target_ip : "192.168.4.2");
     draw_string(6, 60, line, COLOR_GREEN, COLOR_BLACK);
 
-    // 状态标签
-    draw_string(6, 78, "Port: ACM0 [UP]  Net: usb0 [OK]", COLOR_LIGHTGREY, COLOR_BLACK);
+    // TF 卡与会话记录状态
+    if (s_status_data.sd_mounted) {
+        snprintf(line, sizeof(line), "TF: %luGB OK  Log:#%03lu (%luK)",
+                 (unsigned long)(s_status_data.sd_total_mb / 1024),
+                 (unsigned long)s_status_data.sd_session_id,
+                 (unsigned long)(s_status_data.sd_file_bytes / 1024));
+        draw_string(6, 78, line, COLOR_MAGENTA, COLOR_BLACK);
+    } else {
+        draw_string(6, 78, "TF Card: NO CARD (Insert to log)", COLOR_DARKGREY, COLOR_BLACK);
+    }
 
     // 流量指示
     snprintf(line, sizeof(line), "RX: %3lu KB/s  TX: %3lu KB/s",
@@ -270,6 +281,14 @@ static void render_applying(void)
         draw_string(20, 50, "Entering Bootloader...", COLOR_WHITE, COLOR_BLACK);
         draw_string(26, 68, "Ready for idf.py flash", COLOR_GREEN, COLOR_BLACK);
         draw_progress_bar(20, 88, LCD_WIDTH - 40, 8, 100, COLOR_ORANGE, COLOR_BLACK, COLOR_WHITE);
+    } else if (s_current_mode == DEBUGGER_OPT_SD_NEW_SESSION) {
+        draw_string(32, 28, "START NEW SESSION", COLOR_YELLOW, COLOR_BLACK);
+        draw_string(24, 50, "Created new log file", COLOR_WHITE, COLOR_BLACK);
+        draw_progress_bar(20, 80, LCD_WIDTH - 40, 8, 100, COLOR_MAGENTA, COLOR_BLACK, COLOR_WHITE);
+    } else if (s_current_mode == DEBUGGER_OPT_SD_EJECT) {
+        draw_string(36, 28, "TF FLUSH & EJECT", COLOR_YELLOW, COLOR_BLACK);
+        draw_string(24, 50, "Safe to remove card", COLOR_WHITE, COLOR_BLACK);
+        draw_progress_bar(20, 80, LCD_WIDTH - 40, 8, 100, COLOR_ORANGE, COLOR_BLACK, COLOR_WHITE);
     } else if (s_current_mode == DEBUGGER_OPT_REBOOT) {
         draw_string(40, 28, "SYSTEM REBOOTING", COLOR_YELLOW, COLOR_BLACK);
         draw_string(32, 50, "Restarting ESP32-S3...", COLOR_WHITE, COLOR_BLACK);

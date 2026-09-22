@@ -17,6 +17,8 @@ typedef enum {
     DEBUGGER_MODE_PURE_NET,         /*!< 纯网卡模式: 仅枚举 CDC-NCM 虚拟以太网 */
     DEBUGGER_OPT_WIFI_TOGGLE,       /*!< Wi-Fi 重置为 AP 配网热点 */
     DEBUGGER_OPT_DOWNLOAD_MODE,     /*!< 进入 ROM 固件下载模式 (DFU / Bootloader) */
+    DEBUGGER_OPT_SD_NEW_SESSION,    /*!< TF卡: 开启新 Session 日志文件 */
+    DEBUGGER_OPT_SD_EJECT,          /*!< TF卡: 刷盘并安全弹出 */
     DEBUGGER_OPT_REBOOT,            /*!< 系统重启 */
     DEBUGGER_MENU_MAX
 } debugger_mode_t;
@@ -54,6 +56,10 @@ typedef struct {
     bool net_link_up;               /*!< 虚拟网卡是否 Link Up */
     uint32_t rx_bytes_sec;          /*!< 接收速率 (Bytes/s) */
     uint32_t tx_bytes_sec;          /*!< 发送速率 (Bytes/s) */
+    bool sd_mounted;                /*!< TF 卡是否已挂载 */
+    uint32_t sd_total_mb;           /*!< TF 卡容量 (MB) */
+    uint32_t sd_session_id;         /*!< 当前会话 ID */
+    uint32_t sd_file_bytes;         /*!< 当前日志写入大小 (Bytes) */
 } ui_status_data_t;
 
 /**
