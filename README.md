@@ -38,6 +38,12 @@ Plugged into a Target Linux machine's USB-A port, this dongle instantly creates 
 - **Bi-Directional Command Capture**: Logs both Host input `[TX -> Host]` and Target Linux shell/kernel panic output `[RX <- Target]` through an async non-blocking queue.
 - **Interactive Web Log Explorer**: Access `http://192.168.4.1` in your browser to view logs directly in an in-browser modal, download `.log` files to your PC, or delete old logs.
 
+### 7. 5-in-1 Cyber-Dark Web Management Console & Web Terminal
+- **Full Wi-Fi Control (STA & AP)**: Wi-Fi signal scanner with RSSI bars, DHCP or Static IP (custom IP, Mask, Gateway, DNS), auto-reconnect, and custom AP settings (SSID, WPA2 password, channel 1-13, hidden SSID).
+- **Interactive Web Serial Terminal**: Built-in browser terminal console! Send commands directly to Target Linux, inject `Ctrl+C` interrupt signals, execute with `Enter`, clear screen, and view real-time streaming target responses without needing PuTTY.
+- **Hardware PWM LCD Dimming**: Smooth 10% - 100% brightness control driven by ESP32-S3 hardware LEDC timer and PWM channel, with configurable screen sleep timeouts (Never, 30s, 1m, 5m).
+- **Device Diagnostics & Actions**: View live CPU load, 16MB Flash usage, Free Heap memory monitoring, Uptime, and trigger one-click Reboot, ROM Download Mode, or Factory Reset from anywhere on the local network.
+
 ---
 
 ## 🛠️ Hardware Specifications & Pinout

@@ -12,7 +12,8 @@
 | **Phase 2** | **TinyUSB 复合设备与动态重枚举** | ✅ **已完成** | 100% | CDC-ACM (COM41) + CDC-NCM (以太网 24) 复合设备在线，实测 12Mbps 链路与串口回环 |
 | **Phase 3** | **Wi-Fi Web配网、回退保护与下载模式** | ✅ **已完成** | 100% | AP热点(GEEK-Debugger 88%信号)、Web配网后台、自动回退机制、设置菜单内一键进入ROM下载模式实机测试通过 |
 | **Phase 4** | **TF 卡全量会话日志与 Web 文件管理器** | ✅ **已完成** | 100% | 4线原生SDMMC(CLK:36,CMD:35,D0~3:37/33/38/34)、多Session自动分文件、双向命令捕获、Web端日志查看/下载/删除、4MB大分区支持 |
-| **Phase 5** | **嵌入式 WebShell 与无线控制台** | 🟡 **进行中** | 20% | WebSocket 串口双向透传 (xterm.js)、网页控制台与网络数据帧转发 |
+| **Phase 5** | **全功能 Web 管理控制台与交互式终端** | ✅ **已完成** | 100% | 5合1极客暗黑风Web控制中心：全量Wi-Fi配置(DHCP/静态IP/AP参数)、Web实时交互终端(发送/接收流)、串口参数调节、屏幕LEDC PWM调光(10%~100%)、系统诊断与一键ROM下载模式 |
+| **Phase 6** | **lwIP 虚拟以太网桥接与 NAPT 转发** | 🟡 **准备中** | 0% | 为 Target 端 USB 虚拟网卡分配 IP（192.168.4.2）并打通局域网与外网数据帧转发 |
 
 
 ---
@@ -114,12 +115,30 @@
 
 ---
 
-## 阶段五：嵌入式 WebShell 与无线控制台 (Phase 5) - 🟡 [当前推进]
-- [ ] **嵌入式 HTTP & WebSocket 终端服务 (`components/web_console`)**
-  - [ ] 基于 `esp_http_server` 搭建轻量 Web 服务与 REST API
-  - [ ] WebSocket 串口双向透传通道与 xterm.js 嵌入式终端
-  - [ ] 网页端模式切换控制面板与开发板状态实时推送
-- [ ] **lwIP 虚拟以太网桥接与 DHCP**
-  - [ ] 为 Target 端 USB 虚拟网卡分配 IP（192.168.4.2）
-  - [ ] 打通 USB 虚拟网卡与 Wi-Fi 的数据帧交换与 IP 转发 (NAPT)
+## 阶段五：全功能 Web 管理控制台与交互式终端 (Phase 5) - ✅ [已完成]
+- [x] **现代暗黑风 5 合 1 Web 管理门户 (`components/net_bridge/wifi_portal_html.h`)**
+  - [x] 选项卡一【📶 网络】：STA Wi-Fi 信号扫描、DHCP / 静态 IP 切换（可配置 IP、网关、掩码、DNS）、AP 热点自定义（SSID、密码、信道 1-13、隐藏 SSID、最大连接数）、实时网络状态（MAC、RSSI、IP）
+  - [x] 选项卡二【💻 终端】：Web 实时交互式控制台，支持指令下发、`Ctrl+C` 信号注入、`Enter` 快捷执行与清屏，通过 4KB 环形队列无阻塞流式接收串口回显
+  - [x] 选项卡三【💾 TF日志】：查看 TF 卡全量日志列表、实时卡空间监控、在线文本 Modal 查看、一键打包下载 `.log`、删除日志、创建新 Session
+  - [x] 选项卡四【⚙️ 参数】：屏幕背光硬件 **LEDC PWM 调光**（10% ~ 100% 实时无级调节）、屏幕休眠超时（常亮/30s/1m/5m）、屏幕旋转方向；串口波特率调节（9600 至 2000000）、数据位与校验位；TF 卡日志自动记录开关与刷盘周期调节
+  - [x] 选项卡五【⚡ 诊断】：ESP32-S3 CPU 状态、16MB Flash 用量、Free Heap / Min Heap 内存监测、开机时长 (Uptime)、一键设备重启、一键进入 ROM 下载模式、一键恢复出厂设置并擦除 NVS
+- [x] **后台 RESTful API 体系 (`components/net_bridge/net_bridge.c`)**
+  - [x] `GET /api/system/info` / `GET /api/config`
+  - [x] `POST /api/config/wifi_sta` / `POST /api/config/wifi_ap`
+  - [x] `POST /api/config/display` / `POST /api/config/serial` / `POST /api/config/logger`
+  - [x] `POST /api/terminal/tx` / `GET /api/terminal/rx`
+  - [x] `POST /api/system/reboot` / `POST /api/system/download_mode` / `POST /api/system/factory_reset`
+- [x] **NVS 统一配置持久化与硬件联动**
+  - [x] 存储命名空间 `sys_cfg`，开机自启加载已保存的 Wi-Fi、串口、屏幕亮度与超时参数
+  - [x] 屏幕背光升级为 ESP-IDF v6.1 `esp_driver_ledc` 原生硬件 PWM 驱动
+
+---
+
+## 阶段六：lwIP 虚拟以太网桥接与 NAPT 转发 (Phase 6) - 🟡 [后续规划]
+- [ ] **Target 端 USB 虚拟网卡 IP 分配与 DHCP 服务**
+  - [ ] 启用 lwIP DHCP Server 为 Target 分配 `192.168.4.2`
+- [ ] **Wi-Fi 与 USB CDC-NCM 数据帧双向桥接**
+  - [ ] 打通 USB 虚拟以太网帧与 Wi-Fi STA 的桥接传输
+  - [ ] 支持 NAPT (网络地址端口转换)，让 Linux 目标机通过 GEEK 连入互联网进行救援与包下载
+
 

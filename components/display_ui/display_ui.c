@@ -10,6 +10,7 @@
 #include "esp_timer.h"
 #include "driver/gpio.h"
 #include "driver/spi_master.h"
+#include "driver/ledc.h"
 #include "esp_lcd_panel_io.h"
 #include "esp_lcd_panel_vendor.h"
 #include "esp_lcd_panel_ops.h"
@@ -447,11 +448,20 @@ void display_ui_update_status(const ui_status_data_t *data)
     }
 }
 
+#define LCD_LEDC_TIMER       LEDC_TIMER_0
+#define LCD_LEDC_MODE        LEDC_LOW_SPEED_MODE
+#define LCD_LEDC_CHANNEL     LEDC_CHANNEL_0
+#define LCD_LEDC_DUTY_RES    LEDC_TIMER_10_BIT
+#define LCD_LEDC_FREQ_HZ     5000
+
 void display_ui_set_backlight(uint8_t percent)
 {
     if (s_cfg.pin_bl >= 0) {
-        // 简单数字控制：>0 点亮，0 熄灭 (也可升级为 LEDC PWM)
-        gpio_set_level(s_cfg.pin_bl, percent > 0 ? 1 : 0);
+        if (percent > 100) percent = 100;
+        // 10-bit resolution max duty is 1023
+        uint32_t duty = (1023U * (uint32_t)percent) / 100U;
+        ledc_set_duty(LCD_LEDC_MODE, LCD_LEDC_CHANNEL, duty);
+        ledc_update_duty(LCD_LEDC_MODE, LCD_LEDC_CHANNEL);
     }
 }
 
@@ -477,17 +487,27 @@ esp_err_t display_ui_init(const display_ui_config_t *config)
     }
     memset(s_frame_buffer, 0, LCD_WIDTH * LCD_HEIGHT * sizeof(uint16_t));
 
-    // 1. 初始化背光引脚
+    // 1. 初始化背光引脚 (LEDC PWM 硬件无级平滑调光)
     if (s_cfg.pin_bl >= 0) {
-        gpio_config_t bl_conf = {
-            .pin_bit_mask = (1ULL << s_cfg.pin_bl),
-            .mode = GPIO_MODE_OUTPUT,
-            .pull_up_en = GPIO_PULLUP_DISABLE,
-            .pull_down_en = GPIO_PULLDOWN_DISABLE,
-            .intr_type = GPIO_INTR_DISABLE,
+        ledc_timer_config_t ledc_timer = {
+            .speed_mode       = LCD_LEDC_MODE,
+            .timer_num        = LCD_LEDC_TIMER,
+            .duty_resolution  = LCD_LEDC_DUTY_RES,
+            .freq_hz          = LCD_LEDC_FREQ_HZ,
+            .clk_cfg          = LEDC_AUTO_CLK,
         };
-        gpio_config(&bl_conf);
-        display_ui_set_backlight(100);
+        ledc_timer_config(&ledc_timer);
+
+        ledc_channel_config_t ledc_channel = {
+            .speed_mode     = LCD_LEDC_MODE,
+            .channel        = LCD_LEDC_CHANNEL,
+            .timer_sel      = LCD_LEDC_TIMER,
+            .intr_type      = LEDC_INTR_DISABLE,
+            .gpio_num       = s_cfg.pin_bl,
+            .duty           = 1023, // 默认 100% 满亮度
+            .hpoint         = 0,
+        };
+        ledc_channel_config(&ledc_channel);
     }
 
     // 2. 初始化 SPI 总线 (SPI2_HOST)

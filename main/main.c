@@ -33,21 +33,39 @@ static const char *TAG = "APP_MAIN";
 #define GEEK_PIN_SD_D3      34      // SDMMC Data 3
 
 /**
- * @brief 虚拟串口数据接收与全量 TF 卡会话日志记录
+ * @brief Web 终端发出的控制台命令处理
+ */
+static void app_web_terminal_tx_handler(const uint8_t *data, size_t len)
+{
+    // 1. 发送给目标板 / USB CDC
+    usb_serial_write(data, len);
+
+    // 2. 记录到 TF 卡 Session 日志 (TX)
+    sd_logger_log_tx(data, len);
+
+    // 3. 回显推入 Web 终端显示
+    net_bridge_terminal_rx_push(data, len);
+}
+
+/**
+ * @brief 虚拟串口数据接收、全量 TF 卡会话日志与 Web 终端同步
  */
 static void app_serial_rx_handler(const uint8_t *data, size_t len, void *user_ctx)
 {
     // 1. 将 Host 敲入发给 Target 的命令记录到当前 Session (TX)
     sd_logger_log_tx(data, len);
+    net_bridge_terminal_rx_push(data, len);
 
     // 2. 响应 Echo 回显给 Host
     const char echo_header[] = "[ESP32-S3-GEEK Echo]: ";
     usb_serial_write((const uint8_t *)echo_header, strlen(echo_header));
     usb_serial_write(data, len);
 
-    // 3. 将 Target 回显与输出记录到当前 Session (RX)
+    // 3. 将 Target 回显与输出记录到当前 Session (RX) 与 Web 终端
     sd_logger_log_rx((const uint8_t *)echo_header, strlen(echo_header));
     sd_logger_log_rx(data, len);
+    net_bridge_terminal_rx_push((const uint8_t *)echo_header, strlen(echo_header));
+    net_bridge_terminal_rx_push(data, len);
 }
 
 /**
@@ -306,9 +324,14 @@ void app_main(void)
         ESP_LOGE(TAG, "Net Bridge initialization failed: %d", ret);
     } else {
         ESP_LOGI(TAG, "Net Bridge (Wi-Fi Portal & Log Manager) initialized successfully!");
+        net_bridge_register_terminal_tx(app_web_terminal_tx_handler);
+        const sys_config_t *saved_cfg = net_bridge_get_sys_config();
+        if (saved_cfg && saved_cfg->display_brightness > 0) {
+            display_ui_set_backlight(saved_cfg->display_brightness);
+        }
     }
 
-    // 6. 启动状态监控心跳任务
+    // 7. 启动状态监控心跳任务
     xTaskCreate(status_monitor_task, "status_task", 2048, NULL, 4, NULL);
 
     ESP_LOGI(TAG, "System initialization complete. Enjoy wireless debugging!");
