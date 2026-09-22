@@ -144,6 +144,27 @@ static void app_mode_apply_handler(debugger_mode_t mode, void *user_ctx)
         sd_logger_eject();
         break;
 
+    case DEBUGGER_OPT_SD_FORMAT:
+        ESP_LOGW(TAG, "Action: Formatting TF Card (FATFS)...");
+        sd_logger_format();
+        break;
+
+    case DEBUGGER_OPT_BACKLIGHT_CYCLE: {
+        static uint8_t s_brightness_idx = 3;
+        static const uint8_t s_levels[] = { 25, 50, 75, 100 };
+        s_brightness_idx = (s_brightness_idx + 1) % 4;
+        ESP_LOGI(TAG, "Action: Setting Backlight to %d%%", s_levels[s_brightness_idx]);
+        display_ui_set_backlight(s_levels[s_brightness_idx]);
+        break;
+    }
+
+    case DEBUGGER_OPT_FACTORY_RESET:
+        ESP_LOGW(TAG, "Action: Factory Reset requested! Erasing NVS and restarting...");
+        nvs_flash_erase();
+        vTaskDelay(pdMS_TO_TICKS(500));
+        esp_restart();
+        break;
+
     case DEBUGGER_OPT_REBOOT:
         ESP_LOGW(TAG, "Action: System Rebooting in 1 second...");
         vTaskDelay(pdMS_TO_TICKS(1000));
@@ -169,6 +190,7 @@ static ui_status_data_t s_current_ui_status = {
     .tx_bytes_sec = 0,
     .sd_mounted = false,
     .sd_total_mb = 0,
+    .sd_free_mb = 0,
     .sd_session_id = 0,
     .sd_file_bytes = 0,
 };
@@ -222,6 +244,7 @@ static void status_monitor_task(void *pvParameters)
         sd_logger_get_status(&sd_st);
         s_current_ui_status.sd_mounted = sd_st.card_mounted;
         s_current_ui_status.sd_total_mb = sd_st.total_mb;
+        s_current_ui_status.sd_free_mb = sd_st.free_mb;
         s_current_ui_status.sd_session_id = sd_st.current_session_id;
         s_current_ui_status.sd_file_bytes = sd_st.current_file_bytes;
 

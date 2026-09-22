@@ -804,6 +804,20 @@ static esp_err_t http_post_logs_delete_handler(httpd_req_t *req)
     return httpd_resp_send(req, "{\"success\":true}", HTTPD_RESP_USE_STRLEN);
 }
 
+static esp_err_t http_post_logs_format_handler(httpd_req_t *req)
+{
+    ESP_LOGW(TAG, "Web API: Formatting TF Card (FATFS)...");
+    esp_err_t err = sd_logger_format();
+    char resp[128];
+    if (err == ESP_OK) {
+        snprintf(resp, sizeof(resp), "{\"success\":true,\"message\":\"TF Card formatted successfully\"}");
+    } else {
+        snprintf(resp, sizeof(resp), "{\"success\":false,\"error\":%d}", err);
+    }
+    httpd_resp_set_type(req, "application/json");
+    return httpd_resp_send(req, resp, HTTPD_RESP_USE_STRLEN);
+}
+
 /* -------------------- 启动 Web 服务器 -------------------- */
 
 static void start_http_server(void)
@@ -811,7 +825,7 @@ static void start_http_server(void)
     if (s_http_server) return;
 
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
-    config.max_uri_handlers = 20;
+    config.max_uri_handlers = 24;
     config.stack_size = 9216;
 
     if (httpd_start(&s_http_server, &config) == ESP_OK) {
@@ -875,6 +889,9 @@ static void start_http_server(void)
 
         httpd_uri_t uri_logs_del = { .uri = "/api/logs/delete", .method = HTTP_POST, .handler = http_post_logs_delete_handler };
         httpd_register_uri_handler(s_http_server, &uri_logs_del);
+
+        httpd_uri_t uri_logs_format = { .uri = "/api/logs/format", .method = HTTP_POST, .handler = http_post_logs_format_handler };
+        httpd_register_uri_handler(s_http_server, &uri_logs_format);
 
         ESP_LOGI(TAG, "Full-Featured Web Console Server started on port %d", config.server_port);
     }

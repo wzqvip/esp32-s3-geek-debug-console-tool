@@ -52,16 +52,83 @@ static int64_t s_last_action_time_ms = 0;
 static ui_status_data_t s_status_data;
 static bool s_need_refresh = true;
 
-static const char *s_menu_items[] = {
-    "1. Composite (CDC+Net)",
-    "2. Pure Serial (CDC)",
-    "3. Pure Network (NCM)",
-    "4. Wi-Fi: Reset to AP",
-    "5. Enter Download Mode",
-    "6. TF: New Session",
-    "7. TF: Flush & Eject",
-    "8. System Reboot",
+typedef enum {
+    MENU_PAGE_MAIN = 0,    // 一级主菜单
+    MENU_PAGE_USB,         // 二级菜单: 1. USB 模式
+    MENU_PAGE_TF,          // 二级菜单: 2. TF 卡操作
+    MENU_PAGE_WIFI,        // 二级菜单: 3. Wi-Fi 设置
+    MENU_PAGE_SYS,         // 二级菜单: 4. 系统工具
+    MENU_PAGE_COUNT
+} menu_page_t;
+
+typedef struct {
+    const char *label;
+    debugger_mode_t action;
+    menu_page_t next_page;
+    bool is_submenu;
+    bool is_back;
+} menu_item_def_t;
+
+typedef struct {
+    const char *title;
+    int count;
+    menu_item_def_t items[6];
+} menu_page_def_t;
+
+static const menu_page_def_t s_menus[MENU_PAGE_COUNT] = {
+    [MENU_PAGE_MAIN] = {
+        .title = "MAIN MENU (Hold:Enter)",
+        .count = 5,
+        .items = {
+            { "1. USB Mode       >", DEBUGGER_MENU_MAX, MENU_PAGE_USB,  true, false },
+            { "2. TF Card Ops    >", DEBUGGER_MENU_MAX, MENU_PAGE_TF,   true, false },
+            { "3. Wi-Fi Config   >", DEBUGGER_MENU_MAX, MENU_PAGE_WIFI, true, false },
+            { "4. System Tools   >", DEBUGGER_MENU_MAX, MENU_PAGE_SYS,  true, false },
+            { "< Return Dashboard",  DEBUGGER_MENU_MAX, MENU_PAGE_MAIN, false, true },
+        }
+    },
+    [MENU_PAGE_USB] = {
+        .title = "USB MODE (Hold:Apply)",
+        .count = 4,
+        .items = {
+            { "1. Composite (CDC+Net)", DEBUGGER_MODE_COMPOSITE, MENU_PAGE_USB, false, false },
+            { "2. Pure Serial (CDC)",   DEBUGGER_MODE_PURE_SERIAL, MENU_PAGE_USB, false, false },
+            { "3. Pure Network (NCM)",  DEBUGGER_MODE_PURE_NET, MENU_PAGE_USB, false, false },
+            { "< Back to Main Menu",    DEBUGGER_MENU_MAX, MENU_PAGE_MAIN, false, true },
+        }
+    },
+    [MENU_PAGE_TF] = {
+        .title = "TF CARD OPS (Hold:OK)",
+        .count = 4,
+        .items = {
+            { "1. New Session",         DEBUGGER_OPT_SD_NEW_SESSION, MENU_PAGE_TF, false, false },
+            { "2. Flush & Eject",       DEBUGGER_OPT_SD_EJECT, MENU_PAGE_TF, false, false },
+            { "3. Format Card (FATFS)", DEBUGGER_OPT_SD_FORMAT, MENU_PAGE_TF, false, false },
+            { "< Back to Main Menu",    DEBUGGER_MENU_MAX, MENU_PAGE_MAIN, false, true },
+        }
+    },
+    [MENU_PAGE_WIFI] = {
+        .title = "WI-FI CONFIG (Hold:OK)",
+        .count = 2,
+        .items = {
+            { "1. Reset to AP Mode",    DEBUGGER_OPT_WIFI_TOGGLE, MENU_PAGE_WIFI, false, false },
+            { "< Back to Main Menu",    DEBUGGER_MENU_MAX, MENU_PAGE_MAIN, false, true },
+        }
+    },
+    [MENU_PAGE_SYS] = {
+        .title = "SYSTEM TOOLS",
+        .count = 5,
+        .items = {
+            { "1. Backlight Cycle",     DEBUGGER_OPT_BACKLIGHT_CYCLE, MENU_PAGE_SYS, false, false },
+            { "2. Enter Download Mode", DEBUGGER_OPT_DOWNLOAD_MODE, MENU_PAGE_SYS, false, false },
+            { "3. Factory Reset NVS",   DEBUGGER_OPT_FACTORY_RESET, MENU_PAGE_SYS, false, false },
+            { "4. System Reboot",       DEBUGGER_OPT_REBOOT, MENU_PAGE_SYS, false, false },
+            { "< Back to Main Menu",    DEBUGGER_MENU_MAX, MENU_PAGE_MAIN, false, true },
+        }
+    },
 };
+
+static menu_page_t s_current_page = MENU_PAGE_MAIN;
 
 /* -------------------- 基础绘图函数 -------------------- */
 
@@ -191,10 +258,22 @@ static void render_dashboard(void)
 
     // TF 卡与会话记录状态
     if (s_status_data.sd_mounted) {
-        snprintf(line, sizeof(line), "TF: %luGB OK  Log:#%03lu (%luK)",
-                 (unsigned long)(s_status_data.sd_total_mb / 1024),
+        uint32_t used_mb = (s_status_data.sd_total_mb >= s_status_data.sd_free_mb) ?
+                           (s_status_data.sd_total_mb - s_status_data.sd_free_mb) : 0;
+        uint32_t used_pct = (s_status_data.sd_total_mb > 0) ?
+                            (used_mb * 100 / s_status_data.sd_total_mb) : 0;
+
+        char cap_str[16];
+        if (s_status_data.sd_total_mb >= 1024) {
+            snprintf(cap_str, sizeof(cap_str), "%luGB", (unsigned long)((s_status_data.sd_total_mb + 512) / 1024));
+        } else {
+            snprintf(cap_str, sizeof(cap_str), "%luMB", (unsigned long)s_status_data.sd_total_mb);
+        }
+
+        snprintf(line, sizeof(line), "TF: %-5s  Log:#%03lu (%lu%%)",
+                 cap_str,
                  (unsigned long)s_status_data.sd_session_id,
-                 (unsigned long)(s_status_data.sd_file_bytes / 1024));
+                 (unsigned long)used_pct);
         draw_string(6, 78, line, COLOR_MAGENTA, COLOR_BLACK);
     } else {
         draw_string(6, 78, "TF Card: NO CARD (Insert to log)", COLOR_DARKGREY, COLOR_BLACK);
@@ -213,46 +292,30 @@ static void render_dashboard(void)
 
 static void render_menu(void)
 {
+    const menu_page_def_t *page = &s_menus[s_current_page];
+
     // 1. 顶部标题
     fill_rect(0, 0, LCD_WIDTH, 17, COLOR_NAVY);
-    draw_string(4, 1, "SELECT (Short:Next / Long:OK)", COLOR_WHITE, COLOR_NAVY);
+    draw_string(4, 1, page->title, COLOR_WHITE, COLOR_NAVY);
 
     // 2. 菜单项列表
     fill_rect(0, 17, LCD_WIDTH, LCD_HEIGHT - 17 - 18, COLOR_BLACK);
 
-    // 最多同屏显示 6 项
-    int max_visible = 6;
-    int top_index = 0;
-    if (s_menu_cursor >= max_visible) {
-        top_index = s_menu_cursor - max_visible + 1;
-    }
-
     int start_y = 19;
     int line_h = 16;
-    for (int idx = 0; idx < max_visible && (top_index + idx) < DEBUGGER_MENU_MAX; idx++) {
-        int i = top_index + idx;
-        int item_y = start_y + idx * line_h;
-
+    for (int i = 0; i < page->count; i++) {
+        int item_y = start_y + i * line_h;
         bool is_selected = (i == s_menu_cursor);
         uint16_t bg_color = is_selected ? COLOR_DARKCYAN : COLOR_BLACK;
         uint16_t fg_color = is_selected ? COLOR_WHITE : COLOR_LIGHTGREY;
 
-        // 选中项背景高亮
         if (is_selected) {
             fill_rect(2, item_y - 1, LCD_WIDTH - 4, 16, bg_color);
         }
 
         char buf[36];
-        char active_mark = (i == (int)s_current_mode) ? '*' : ' ';
-        snprintf(buf, sizeof(buf), "%c%s", is_selected ? '>' : ' ', s_menu_items[i]);
-        if (active_mark == '*') {
-            int len = strlen(buf);
-            if (len < 26) {
-                buf[len] = ' ';
-                buf[len+1] = '*';
-                buf[len+2] = '\0';
-            }
-        }
+        bool is_active_mode = (s_current_page == MENU_PAGE_USB && page->items[i].action == s_current_mode);
+        snprintf(buf, sizeof(buf), "%c%s%s", is_selected ? '>' : ' ', page->items[i].label, is_active_mode ? " *" : "");
         draw_string(4, item_y, buf, fg_color, bg_color);
     }
 
@@ -265,7 +328,8 @@ static void render_menu(void)
         draw_progress_bar(100, LCD_HEIGHT - 15, 134, 13, s_charging_progress, COLOR_ORANGE, COLOR_DARKGREY, COLOR_WHITE);
     } else {
         fill_rect(0, LCD_HEIGHT - 18, LCD_WIDTH, 18, COLOR_DARKGREY);
-        draw_string(6, LCD_HEIGHT - 16, "[Hold >1.5s to Confirm]", COLOR_CYAN, COLOR_DARKGREY);
+        const char *hint = page->items[s_menu_cursor].is_submenu ? "[Hold >1.5s to Enter]" : "[Hold >1.5s to Select]";
+        draw_string(6, LCD_HEIGHT - 16, hint, COLOR_CYAN, COLOR_DARKGREY);
     }
 }
 
@@ -290,6 +354,19 @@ static void render_applying(void)
         draw_string(36, 28, "TF FLUSH & EJECT", COLOR_YELLOW, COLOR_BLACK);
         draw_string(24, 50, "Safe to remove card", COLOR_WHITE, COLOR_BLACK);
         draw_progress_bar(20, 80, LCD_WIDTH - 40, 8, 100, COLOR_ORANGE, COLOR_BLACK, COLOR_WHITE);
+    } else if (s_current_mode == DEBUGGER_OPT_SD_FORMAT) {
+        draw_string(28, 28, "FORMATTING TF CARD", COLOR_RED, COLOR_BLACK);
+        draw_string(26, 50, "Rebuilding FATFS...", COLOR_WHITE, COLOR_BLACK);
+        draw_string(30, 68, "All files erased", COLOR_YELLOW, COLOR_BLACK);
+        draw_progress_bar(20, 88, LCD_WIDTH - 40, 8, 100, COLOR_RED, COLOR_BLACK, COLOR_WHITE);
+    } else if (s_current_mode == DEBUGGER_OPT_BACKLIGHT_CYCLE) {
+        draw_string(32, 28, "LCD BACKLIGHT", COLOR_YELLOW, COLOR_BLACK);
+        draw_string(26, 50, "Brightness Adjusted", COLOR_WHITE, COLOR_BLACK);
+        draw_progress_bar(20, 80, LCD_WIDTH - 40, 8, 100, COLOR_YELLOW, COLOR_BLACK, COLOR_WHITE);
+    } else if (s_current_mode == DEBUGGER_OPT_FACTORY_RESET) {
+        draw_string(24, 28, "FACTORY RESET (NVS)", COLOR_RED, COLOR_BLACK);
+        draw_string(28, 50, "Clearing config...", COLOR_WHITE, COLOR_BLACK);
+        draw_progress_bar(20, 80, LCD_WIDTH - 40, 8, 100, COLOR_RED, COLOR_BLACK, COLOR_WHITE);
     } else if (s_current_mode == DEBUGGER_OPT_REBOOT) {
         draw_string(40, 28, "SYSTEM REBOOTING", COLOR_YELLOW, COLOR_BLACK);
         draw_string(32, 50, "Restarting ESP32-S3...", COLOR_WHITE, COLOR_BLACK);
@@ -322,10 +399,12 @@ static void ui_task(void *pvParameters)
         int64_t now_ms = esp_timer_get_time() / 1000LL;
 
         if (xSemaphoreTake(s_ui_mutex, pdMS_TO_TICKS(50)) == pdTRUE) {
-            // 超时检测：如果处于菜单页面，且 5 秒无任何操作，自动退回 Dashboard
+            // 超时检测：如果处于菜单页面，且 8 秒无任何操作，自动退回 Dashboard
             if (s_current_view == UI_VIEW_MENU && s_charging_progress == 0) {
-                if (now_ms - s_last_action_time_ms > 5000) {
+                if (now_ms - s_last_action_time_ms > 8000) {
                     s_current_view = UI_VIEW_DASHBOARD;
+                    s_current_page = MENU_PAGE_MAIN;
+                    s_menu_cursor = 0;
                     s_need_refresh = true;
                     ESP_LOGI(TAG, "Menu timeout, returning to dashboard");
                 }
@@ -367,12 +446,16 @@ void display_ui_on_short_press(void)
         s_charging_progress = 0;
 
         if (s_current_view == UI_VIEW_DASHBOARD) {
-            // 仪表盘界面下，短按进入菜单模式
+            // 仪表盘界面下，短按进入菜单模式 (一级主菜单)
             s_current_view = UI_VIEW_MENU;
-            s_menu_cursor = (int)s_current_mode; // 默认选中当前正在运行的模式
+            s_current_page = MENU_PAGE_MAIN;
+            s_menu_cursor = 0;
         } else if (s_current_view == UI_VIEW_MENU) {
             // 菜单界面下，短按向下循环切换选择项
-            s_menu_cursor = (s_menu_cursor + 1) % DEBUGGER_MENU_MAX;
+            int max_cnt = s_menus[s_current_page].count;
+            if (max_cnt > 0) {
+                s_menu_cursor = (s_menu_cursor + 1) % max_cnt;
+            }
         }
 
         s_need_refresh = true;
@@ -388,7 +471,8 @@ void display_ui_on_long_press_tick(uint8_t progress)
         // 如果在 Dashboard 收到长按，直接切换进入菜单并展示进度
         if (s_current_view == UI_VIEW_DASHBOARD) {
             s_current_view = UI_VIEW_MENU;
-            s_menu_cursor = (int)s_current_mode;
+            s_current_page = MENU_PAGE_MAIN;
+            s_menu_cursor = 0;
         }
 
         s_charging_progress = progress;
@@ -409,30 +493,60 @@ void display_ui_on_long_press_cancel(void)
 
 void display_ui_on_long_press_confirm(void)
 {
+    bool is_action = false;
     debugger_mode_t target_mode = DEBUGGER_MODE_COMPOSITE;
 
     if (xSemaphoreTake(s_ui_mutex, pdMS_TO_TICKS(50)) == pdTRUE) {
-        s_charging_progress = 100;
-        target_mode = (debugger_mode_t)s_menu_cursor;
-        s_current_mode = target_mode;
-        s_current_view = UI_VIEW_APPLYING;
-        s_need_refresh = true;
-        xSemaphoreGive(s_ui_mutex);
+        s_charging_progress = 0;
+        const menu_item_def_t *item = &s_menus[s_current_page].items[s_menu_cursor];
+
+        if (item->is_back) {
+            // 返回操作：如果在一级主菜单，退回仪表盘；如果在二级菜单，退回主菜单
+            if (s_current_page == MENU_PAGE_MAIN) {
+                s_current_view = UI_VIEW_DASHBOARD;
+            } else {
+                s_current_page = MENU_PAGE_MAIN;
+                s_menu_cursor = 0;
+            }
+            s_need_refresh = true;
+            xSemaphoreGive(s_ui_mutex);
+            return;
+        } else if (item->is_submenu) {
+            // 进入二级子菜单
+            s_current_page = item->next_page;
+            s_menu_cursor = 0;
+            s_need_refresh = true;
+            xSemaphoreGive(s_ui_mutex);
+            return;
+        } else {
+            // 执行实际动作
+            is_action = true;
+            target_mode = item->action;
+            s_current_mode = target_mode;
+            s_charging_progress = 100;
+            s_current_view = UI_VIEW_APPLYING;
+            s_need_refresh = true;
+            xSemaphoreGive(s_ui_mutex);
+        }
     }
 
-    ESP_LOGI(TAG, "Long press CONFIRM triggered! Target mode: %d", target_mode);
+    if (!is_action) return;
 
-    // 回调外部模式切换函数
+    ESP_LOGI(TAG, "Long press CONFIRM action triggered! Target action: %d", target_mode);
+
+    // 回调外部模式或动作函数
     if (s_cfg.on_apply) {
         s_cfg.on_apply(target_mode, s_cfg.user_ctx);
     }
 
-    // 保持提示 1.2 秒后退回仪表盘
+    // 保持提示 1.2 秒后退回仪表盘，并重置菜单层级
     vTaskDelay(pdMS_TO_TICKS(1200));
 
     if (xSemaphoreTake(s_ui_mutex, pdMS_TO_TICKS(50)) == pdTRUE) {
         s_charging_progress = 0;
         s_current_view = UI_VIEW_DASHBOARD;
+        s_current_page = MENU_PAGE_MAIN;
+        s_menu_cursor = 0;
         s_need_refresh = true;
         xSemaphoreGive(s_ui_mutex);
     }

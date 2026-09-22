@@ -13,28 +13,34 @@ Plugged into a Target Linux machine's USB-A port, this dongle instantly creates 
 - **Dynamic Mode Re-enumeration**: On-the-fly switching between **Composite Mode**, **Pure Serial Mode**, and **Pure Network Mode** using clean software USB detachment (`tud_disconnect() -> re-enumerate -> tud_connect()`).
 - **High-Speed Link**: Verified 12 Mbps Full-Speed USB Ethernet with native Windows/Linux driver support (no driver installation needed).
 
-### 2. Single-Button Intelligent Interaction
+### 2. Single-Button Hierarchical Sub-Menu System
 - **20 ms Hardware Debounce**: Eliminates contact bounce and electrical glitches.
-- **Short Press (< 600 ms)**: Cycles through the on-screen configuration and mode menu.
-- **Long Press (> 1500 ms) with Live Charge Bar**: Dynamic progress bar (`Hold OK: 0% -> 100%`) visually fills at the bottom of the screen. Releasing early cancels safely; holding past 1.5s confirms and applies the selected action immediately.
+- **Short Press (< 600 ms)**: Cycles through menu options or advances to next item.
+- **Long Press (> 1500 ms) with Live Charge Bar**: Dynamic progress bar (`Hold OK: 0% -> 100%`) visually fills at the bottom of the screen. Releasing early cancels safely; holding past 1.5s confirms and enters sub-menus or executes actions immediately.
+- **Two-Level Sub-Menu Architecture**:
+  - `MAIN MENU`: `1. USB Mode >`, `2. TF Card Ops >`, `3. Wi-Fi Config >`, `4. System Tools >`, `< Return Dashboard`
+  - Sub-menus include dedicated operations and a `< Back to Main Menu` return option.
+- **Auto-Dismissing Timeout**: Returns to Dashboard after 8 seconds of inactivity.
 
 ### 3. 1.14" IPS LCD Real-Time Dashboard (ST7789)
 - **High Performance**: Native ESP-IDF `esp_lcd` hardware driver running at 40 MHz SPI with double-buffered internal SRAM FrameBuffer (zero flicker, 50 Hz refresh).
 - **Comprehensive Monitoring**: Displays live operating mode, assigned Wi-Fi IP, target IP, serial baud rate, and real-time RX/TX network throughput.
-- **Auto-Dismissing Menu**: Menu automatically reverts to the dashboard after 5 seconds of inactivity.
+- **Consistent TF Card & Session Formatting**: Displays card capacity directly following `TF:` with consistent percentage usage (e.g., `TF: 16GB  Log:#001 (2%)`).
 
 ### 4. Wi-Fi AP Web Portal & Automatic Fallback
 - **Out-of-the-Box AP**: Broadcasts open AP `GEEK-Debugger` (default IP: `192.168.4.1`) on 2.4 GHz 802.11n.
 - **Responsive Dark-Theme Web Portal**: Embedded zero-dependency web interface providing real-time Wi-Fi network scanning, SSID/Password configuration, and connection status reporting.
 - **Automatic Fallback Protection**: If the target router is unreachable or password authentication fails after 5 retries, the system automatically falls back to AP configuration mode and notifies the user via the LCD.
 
-### 5. One-Click Software Download Mode (ROM Bootloader)
+### 5. One-Click Software Download Mode & 1200-Baud Touch
 - **No Physical Button Holding or Cable Re-plugging**: Due to the enclosed case of the ESP32-S3-GEEK, entering download mode manually is cumbersome.
-- **Menu-Driven DFU**: Selecting `5. Enter Download Mode` softly detaches USB, sets `RTC_CNTL_FORCE_DOWNLOAD_BOOT` in the RTC controller, and restarts straight into the ESP32-S3 ROM bootloader (`COM40`). The host PC can flash immediately via `idf.py flash`!
+- **Menu-Driven DFU**: Selecting `System Tools -> 2. Enter Download Mode` softly detaches USB, sets `RTC_CNTL_FORCE_DOWNLOAD_BOOT` in the RTC controller, and restarts straight into the ESP32-S3 ROM bootloader.
+- **1200-Baud Touch Auto-Reset**: Opening the CDC-ACM port at 1200 baud triggers an automatic reboot into ROM bootloader download mode for seamless tool flashing.
 
-### 6. MicroSD (TF) Card Full CLI Session Logging & Web File Manager
+### 6. MicroSD (TF) Card Full CLI Session Logging & FATFS Formatter
 - **Native 4-bit SDMMC Driver**: High-speed communication with FATFS mounted at `/sdcard/logs/` using native ESP32-S3 SDMMC Slot 1 with 1-bit auto-fallback.
 - **Automatic Multi-Session File Isolation**: Each reboot or manual session trigger creates an isolated file (`session_001.log`, `session_002.log`...) with standard session headers.
+- **FATFS Card Formatting**: Built-in physical format tool accessible from both the LCD menu (`TF Card Ops -> 3. Format Card (FATFS)`) and the Web Portal (`POST /api/logs/format`), automatically wiping and rebuilding a fresh `/sdcard/logs` directory.
 - **Bi-Directional Command Capture**: Logs both Host input `[TX -> Host]` and Target Linux shell/kernel panic output `[RX <- Target]` through an async non-blocking queue.
 - **Interactive Web Log Explorer**: Access `http://192.168.4.1` in your browser to view logs directly in an in-browser modal, download `.log` files to your PC, or delete old logs.
 

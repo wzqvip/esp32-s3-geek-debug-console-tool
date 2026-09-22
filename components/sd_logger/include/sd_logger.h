@@ -103,6 +103,13 @@ esp_err_t sd_logger_list_files_json(char *json_buf, size_t max_len);
  */
 esp_err_t sd_logger_delete_file(const char *filename);
 
+/**
+ * @brief 格式化 TF 卡为全新 FATFS 文件系统并重建日志目录与新会话
+ *
+ * @return esp_err_t ESP_OK 成功
+ */
+esp_err_t sd_logger_format(void);
+
 #ifdef __cplusplus
 }
 #endif

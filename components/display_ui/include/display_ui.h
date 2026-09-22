@@ -19,6 +19,9 @@ typedef enum {
     DEBUGGER_OPT_DOWNLOAD_MODE,     /*!< 进入 ROM 固件下载模式 (DFU / Bootloader) */
     DEBUGGER_OPT_SD_NEW_SESSION,    /*!< TF卡: 开启新 Session 日志文件 */
     DEBUGGER_OPT_SD_EJECT,          /*!< TF卡: 刷盘并安全弹出 */
+    DEBUGGER_OPT_SD_FORMAT,         /*!< TF卡: 格式化存储卡 */
+    DEBUGGER_OPT_BACKLIGHT_CYCLE,   /*!< 循环切换背光亮度 (25% -> 50% -> 75% -> 100%) */
+    DEBUGGER_OPT_FACTORY_RESET,     /*!< 恢复出厂设置并擦除 NVS */
     DEBUGGER_OPT_REBOOT,            /*!< 系统重启 */
     DEBUGGER_MENU_MAX
 } debugger_mode_t;
@@ -58,6 +61,7 @@ typedef struct {
     uint32_t tx_bytes_sec;          /*!< 发送速率 (Bytes/s) */
     bool sd_mounted;                /*!< TF 卡是否已挂载 */
     uint32_t sd_total_mb;           /*!< TF 卡容量 (MB) */
+    uint32_t sd_free_mb;            /*!< TF 卡剩余空间 (MB) */
     uint32_t sd_session_id;         /*!< 当前会话 ID */
     uint32_t sd_file_bytes;         /*!< 当前日志写入大小 (Bytes) */
 } ui_status_data_t;

@@ -3,6 +3,8 @@
 #include "esp_log.h"
 #include "esp_check.h"
 #include "esp_mac.h"
+#include "esp_system.h"
+#include "soc/rtc_cntl_reg.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "tinyusb.h"
@@ -50,6 +52,20 @@ static void cdc_line_state_callback(int itf, cdcacm_event_t *event)
     int dtr = event->line_state_changed_data.dtr;
     int rts = event->line_state_changed_data.rts;
     ESP_LOGI(TAG, "CDC-ACM line state changed: DTR=%d, RTS=%d", dtr, rts);
+}
+
+static void cdc_line_coding_callback(int itf, cdcacm_event_t *event)
+{
+    if (event->line_coding_changed_data.p_line_coding) {
+        uint32_t baud = event->line_coding_changed_data.p_line_coding->bit_rate;
+        ESP_LOGI(TAG, "CDC-ACM line coding changed: Baudrate=%lu", (unsigned long)baud);
+        if (baud == 1200) {
+            ESP_LOGW(TAG, "1200-baud touch detected! Rebooting into ROM Bootloader Download Mode...");
+            vTaskDelay(pdMS_TO_TICKS(100));
+            REG_WRITE(RTC_CNTL_OPTION1_REG, RTC_CNTL_FORCE_DOWNLOAD_BOOT);
+            esp_restart();
+        }
+    }
 }
 
 /* -------------------- CDC-NCM 虚拟网卡回调 -------------------- */
@@ -111,7 +127,7 @@ static esp_err_t init_submodules_for_mode(usb_mode_t mode)
             .callback_rx = &cdc_rx_callback,
             .callback_rx_wanted_char = NULL,
             .callback_line_state_changed = &cdc_line_state_callback,
-            .callback_line_coding_changed = NULL,
+            .callback_line_coding_changed = &cdc_line_coding_callback,
         };
         ret = tinyusb_cdcacm_init(&acm_cfg);
         if (ret == ESP_OK) {

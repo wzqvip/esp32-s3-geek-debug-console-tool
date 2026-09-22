@@ -32,14 +32,18 @@
 - [x] **ST7789 显示驱动与双缓冲渲染 (`components/display_ui`)**
   - [x] 基于 ESP-IDF v6.1 `esp_lcd` 原生驱动 ST7789
   - [x] 240×135 内部 SRAM 双缓冲 FrameBuffer，40MHz SPI 零闪烁刷新
-  - [x] 仪表盘监控界面 (Dashboard)：展示运行模式、IP 地址、串口波特率、数据速率
-  - [x] 菜单选择界面 (Menu)：显示候选项目，高亮条指示当前游标，支持 6 项滚动适配
+  - [x] 仪表盘监控界面 (Dashboard)：展示运行模式、Wi-Fi 状态、IP 地址、**TF 卡容量与使用百分比 (`TF: 16GB  Log:#001 (2%)`)**、实时网络速率
+  - [x] **二级层级菜单系统 (2-Level Sub-Menu)**：
+    - 一级主菜单：USB 模式、TF 卡操作、Wi-Fi 设置、系统工具、返回仪表盘
+    - 二级子菜单：详细操作项，支持 `< Back to Main Menu` 返回
+    - 单键操作体验：短按循环切换光标，长按 >1.5s 蓄力进入子菜单或执行动作
   - [x] 动态蓄力进度条：长按时在底栏绘制 `Hold OK: xx% [====>   ]`
-  - [x] 执行弹窗提示 (Applying)：长按确认后弹出专用提示窗口（包括专属下载模式弹窗）
-  - [x] 菜单 5 秒超时无操作自动返回仪表盘
+  - [x] 执行弹窗提示 (Applying)：长按确认后弹出专用提示窗口（包括 TF 格式化专属红框警告弹窗）
+  - [x] 菜单 8 秒超时无操作自动返回仪表盘
 - [x] **实机编译与烧录验证**
   - [x] 成功使用 ESP-IDF v6.1 编译通过
-  - [x] 成功通过 `COM40` 烧录进 ESP32-S3-GEEK 并在板载屏幕上点亮运行
+  - [x] 成功通过 `COM40/COM41` 烧录进 ESP32-S3-GEEK 并在板载屏幕上点亮运行
+  - [x] 支持 1200-Baud 串口触碰无感自动重启进入 ROM Bootloader 烧录模式
 
 ---
 
@@ -106,12 +110,16 @@
   - [x] `GET /api/logs/download`：一键下载 `.log` 原始文件至电脑
   - [x] `POST /api/logs/new_session`：网页端一键开启新会话
   - [x] `POST /api/logs/delete`：清理废弃日志文件
+  - [x] `POST /api/logs/format`：Web 端一键格式化 TF 卡 (FATFS)，带二次弹窗防误触保护
+- [x] **TF 卡格式化 (FATFS Reformatting)**
+  - [x] 底层集成 `esp_vfs_fat_sdcard_format()` 原生物理格式化
+  - [x] 格式化完成后自动重建 `/sdcard/logs` 目录并重置为 `session_001.log`
 - [x] **ST7789 屏幕 UI 联动**
-  - [x] 仪表盘动态展示：`TF: 16GB OK Log:#001 (14K)`
-  - [x] 菜单新增：`6. TF: New Session`（一键切新会话）与 `7. TF: Flush & Eject`（安全弹出）
+  - [x] 仪表盘动态展示：`TF: 16GB  Log:#001 (2%)`，卡容量紧随 `TF:` 之后，百分比格式统一
+  - [x] 二级菜单集成：`2. TF Card Ops >` 包含 `1. New Session`, `2. Flush & Eject`, `3. Format Card (FATFS)`
 - [x] **Flash 分区表扩展**
   - [x] 针对 ESP32-S3-GEEK 16MB Flash 定制 `partitions.csv`
-  - [x] 将 App 运行分区从 1MB 扩大至 4MB（空闲率 76%），为后续 WebShell (xterm.js) 预留充裕空间
+  - [x] 将 App 运行分区从 1MB 扩大至 4MB（空闲率 75%），为后续高级网络协议与功能预留充裕空间
 
 ---
 

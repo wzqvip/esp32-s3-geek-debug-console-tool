@@ -412,3 +412,43 @@ esp_err_t sd_logger_delete_file(const char *filename)
     }
     return ESP_FAIL;
 }
+
+esp_err_t sd_logger_format(void)
+{
+    if (!s_status.card_mounted || !s_card) {
+        ESP_LOGW(TAG, "Cannot format: TF card is not mounted");
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    ESP_LOGW(TAG, "Executing TF Card Format (FATFS)...");
+
+    // 1. 关闭打开中的文件句柄
+    if (s_file_mutex && xSemaphoreTake(s_file_mutex, pdMS_TO_TICKS(1000)) == pdTRUE) {
+        if (s_current_file) {
+            fclose(s_current_file);
+            s_current_file = NULL;
+        }
+        xSemaphoreGive(s_file_mutex);
+    }
+
+    // 2. 调用原生 FATFS 格式化函数
+    esp_err_t err = esp_vfs_fat_sdcard_format(SD_LOGGER_MOUNT_POINT, s_card);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Format failed with error: %d", err);
+        return err;
+    }
+
+    // 3. 重建日志目录
+    mkdir(SD_LOGGER_LOGS_DIR, 0755);
+
+    // 4. 重置会话ID并创建 session_001.log
+    s_status.current_session_id = 0;
+    sd_logger_start_new_session();
+
+    // 5. 刷新容量
+    update_storage_capacity();
+
+    ESP_LOGI(TAG, "TF Card formatted successfully! Ready for logging.");
+    return ESP_OK;
+}
+
