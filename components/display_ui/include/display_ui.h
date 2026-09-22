@@ -20,6 +20,7 @@ typedef enum {
     DEBUGGER_OPT_SD_NEW_SESSION,    /*!< TF卡: 开启新 Session 日志文件 */
     DEBUGGER_OPT_SD_EJECT,          /*!< TF卡: 刷盘并安全弹出 */
     DEBUGGER_OPT_SD_FORMAT,         /*!< TF卡: 格式化存储卡 */
+    DEBUGGER_OPT_SCREEN_ROTATE,     /*!< 切换屏幕方向 (0° / 180°) */
     DEBUGGER_OPT_BACKLIGHT_CYCLE,   /*!< 循环切换背光亮度 (25% -> 50% -> 75% -> 100%) */
     DEBUGGER_OPT_FACTORY_RESET,     /*!< 恢复出厂设置并擦除 NVS */
     DEBUGGER_OPT_REBOOT,            /*!< 系统重启 */
@@ -33,6 +34,7 @@ typedef enum {
     UI_VIEW_DASHBOARD,              /*!< 仪表盘监控界面 */
     UI_VIEW_MENU,                   /*!< 菜单选择界面 (短按切换) */
     UI_VIEW_APPLYING,               /*!< 正在应用配置提示 (长按确认后) */
+    UI_VIEW_INFO,                   /*!< 详情信息界面 (单击切页，长按返回) */
 } ui_view_t;
 
 /**
@@ -46,7 +48,7 @@ typedef enum {
 } ui_wifi_status_t;
 
 /**
- * @brief 运行时状态数据，供仪表盘显示
+ * @brief 运行时状态数据，供仪表盘与 Info 页面显示
  */
 typedef struct {
     debugger_mode_t current_mode;
@@ -64,6 +66,14 @@ typedef struct {
     uint32_t sd_free_mb;            /*!< TF 卡剩余空间 (MB) */
     uint32_t sd_session_id;         /*!< 当前会话 ID */
     uint32_t sd_file_bytes;         /*!< 当前日志写入大小 (Bytes) */
+    uint32_t free_heap_kb;          /*!< 空闲内存 (KB) */
+    uint32_t min_heap_kb;           /*!< 最小历史空闲内存 (KB) */
+    uint32_t uptime_sec;            /*!< 运行时间 (秒) */
+    char sta_gw[20];                /*!< 网关 IP */
+    char ap_ssid[33];               /*!< AP SSID */
+    char ap_ip[20];                 /*!< AP IP */
+    uint8_t wifi_channel;           /*!< Wi-Fi 信道 */
+    uint8_t mac_addr[6];            /*!< STA/AP MAC 地址 */
 } ui_status_data_t;
 
 /**
@@ -129,6 +139,23 @@ void display_ui_update_status(const ui_status_data_t *data);
  * @param percent 亮度百分比 (0 ~ 100)
  */
 void display_ui_set_backlight(uint8_t percent);
+
+/**
+ * @brief 设置屏幕横向旋转方向
+ *
+ * @param inverted true 为翻转 180°，false 为默认 0°
+ */
+void display_ui_set_rotation(bool inverted);
+
+/**
+ * @brief 获取当前屏幕是否处于 180° 翻转模式
+ */
+bool display_ui_get_rotation(void);
+
+/**
+ * @brief 切换屏幕横向旋转方向 (0° <-> 180°)
+ */
+void display_ui_toggle_rotation(void);
 
 #ifdef __cplusplus
 }

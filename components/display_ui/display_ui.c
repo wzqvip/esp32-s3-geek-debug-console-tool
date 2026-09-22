@@ -53,6 +53,13 @@ static ui_status_data_t s_status_data;
 static bool s_need_refresh = true;
 
 typedef enum {
+    INFO_TYPE_NONE = 0,
+    INFO_TYPE_TF,
+    INFO_TYPE_WIFI,
+    INFO_TYPE_SYS
+} info_type_t;
+
+typedef enum {
     MENU_PAGE_MAIN = 0,    // 一级主菜单
     MENU_PAGE_USB,         // 二级菜单: 1. USB 模式
     MENU_PAGE_TF,          // 二级菜单: 2. TF 卡操作
@@ -67,12 +74,14 @@ typedef struct {
     menu_page_t next_page;
     bool is_submenu;
     bool is_back;
+    bool is_info;
+    info_type_t info_type;
 } menu_item_def_t;
 
 typedef struct {
     const char *title;
     int count;
-    menu_item_def_t items[6];
+    menu_item_def_t items[8];
 } menu_page_def_t;
 
 static const menu_page_def_t s_menus[MENU_PAGE_COUNT] = {
@@ -80,55 +89,62 @@ static const menu_page_def_t s_menus[MENU_PAGE_COUNT] = {
         .title = "MAIN MENU (Hold:Enter)",
         .count = 5,
         .items = {
-            { "1. USB Mode       >", DEBUGGER_MENU_MAX, MENU_PAGE_USB,  true, false },
-            { "2. TF Card Ops    >", DEBUGGER_MENU_MAX, MENU_PAGE_TF,   true, false },
-            { "3. Wi-Fi Config   >", DEBUGGER_MENU_MAX, MENU_PAGE_WIFI, true, false },
-            { "4. System Tools   >", DEBUGGER_MENU_MAX, MENU_PAGE_SYS,  true, false },
-            { "< Return Dashboard",  DEBUGGER_MENU_MAX, MENU_PAGE_MAIN, false, true },
+            { "1. USB Mode       >", DEBUGGER_MENU_MAX,           MENU_PAGE_USB,  true,  false, false, INFO_TYPE_NONE },
+            { "2. TF Card Ops    >", DEBUGGER_MENU_MAX,           MENU_PAGE_TF,   true,  false, false, INFO_TYPE_NONE },
+            { "3. Wi-Fi Config   >", DEBUGGER_MENU_MAX,           MENU_PAGE_WIFI, true,  false, false, INFO_TYPE_NONE },
+            { "4. System Tools   >", DEBUGGER_MENU_MAX,           MENU_PAGE_SYS,  true,  false, false, INFO_TYPE_NONE },
+            { "< Return Dashboard",  DEBUGGER_MENU_MAX,           MENU_PAGE_MAIN, false, true,  false, INFO_TYPE_NONE },
         }
     },
     [MENU_PAGE_USB] = {
         .title = "USB MODE (Hold:Apply)",
         .count = 4,
         .items = {
-            { "1. Composite (CDC+Net)", DEBUGGER_MODE_COMPOSITE, MENU_PAGE_USB, false, false },
-            { "2. Pure Serial (CDC)",   DEBUGGER_MODE_PURE_SERIAL, MENU_PAGE_USB, false, false },
-            { "3. Pure Network (NCM)",  DEBUGGER_MODE_PURE_NET, MENU_PAGE_USB, false, false },
-            { "< Back to Main Menu",    DEBUGGER_MENU_MAX, MENU_PAGE_MAIN, false, true },
+            { "1. Composite (CDC+Net)", DEBUGGER_MODE_COMPOSITE,   MENU_PAGE_USB,  false, false, false, INFO_TYPE_NONE },
+            { "2. Pure Serial (CDC)",   DEBUGGER_MODE_PURE_SERIAL, MENU_PAGE_USB,  false, false, false, INFO_TYPE_NONE },
+            { "3. Pure Network (NCM)",  DEBUGGER_MODE_PURE_NET,    MENU_PAGE_USB,  false, false, false, INFO_TYPE_NONE },
+            { "< Back to Main Menu",    DEBUGGER_MENU_MAX,         MENU_PAGE_MAIN, false, true,  false, INFO_TYPE_NONE },
         }
     },
     [MENU_PAGE_TF] = {
         .title = "TF CARD OPS (Hold:OK)",
-        .count = 4,
+        .count = 5,
         .items = {
-            { "1. New Session",         DEBUGGER_OPT_SD_NEW_SESSION, MENU_PAGE_TF, false, false },
-            { "2. Flush & Eject",       DEBUGGER_OPT_SD_EJECT, MENU_PAGE_TF, false, false },
-            { "3. Format Card (FATFS)", DEBUGGER_OPT_SD_FORMAT, MENU_PAGE_TF, false, false },
-            { "< Back to Main Menu",    DEBUGGER_MENU_MAX, MENU_PAGE_MAIN, false, true },
+            { "1. TF Info & State >",   DEBUGGER_MENU_MAX,           MENU_PAGE_TF,   false, false, true,  INFO_TYPE_TF },
+            { "2. New Session",         DEBUGGER_OPT_SD_NEW_SESSION, MENU_PAGE_TF,   false, false, false, INFO_TYPE_NONE },
+            { "3. Flush & Eject",       DEBUGGER_OPT_SD_EJECT,       MENU_PAGE_TF,   false, false, false, INFO_TYPE_NONE },
+            { "4. Format Card (FATFS)", DEBUGGER_OPT_SD_FORMAT,      MENU_PAGE_TF,   false, false, false, INFO_TYPE_NONE },
+            { "< Back to Main Menu",    DEBUGGER_MENU_MAX,           MENU_PAGE_MAIN, false, true,  false, INFO_TYPE_NONE },
         }
     },
     [MENU_PAGE_WIFI] = {
         .title = "WI-FI CONFIG (Hold:OK)",
-        .count = 2,
+        .count = 3,
         .items = {
-            { "1. Reset to AP Mode",    DEBUGGER_OPT_WIFI_TOGGLE, MENU_PAGE_WIFI, false, false },
-            { "< Back to Main Menu",    DEBUGGER_MENU_MAX, MENU_PAGE_MAIN, false, true },
+            { "1. Wi-Fi Status & Info>",DEBUGGER_MENU_MAX,           MENU_PAGE_WIFI, false, false, true,  INFO_TYPE_WIFI },
+            { "2. Reset to AP Mode",    DEBUGGER_OPT_WIFI_TOGGLE,    MENU_PAGE_WIFI, false, false, false, INFO_TYPE_NONE },
+            { "< Back to Main Menu",    DEBUGGER_MENU_MAX,           MENU_PAGE_MAIN, false, true,  false, INFO_TYPE_NONE },
         }
     },
     [MENU_PAGE_SYS] = {
         .title = "SYSTEM TOOLS",
-        .count = 5,
+        .count = 7,
         .items = {
-            { "1. Backlight Cycle",     DEBUGGER_OPT_BACKLIGHT_CYCLE, MENU_PAGE_SYS, false, false },
-            { "2. Enter Download Mode", DEBUGGER_OPT_DOWNLOAD_MODE, MENU_PAGE_SYS, false, false },
-            { "3. Factory Reset NVS",   DEBUGGER_OPT_FACTORY_RESET, MENU_PAGE_SYS, false, false },
-            { "4. System Reboot",       DEBUGGER_OPT_REBOOT, MENU_PAGE_SYS, false, false },
-            { "< Back to Main Menu",    DEBUGGER_MENU_MAX, MENU_PAGE_MAIN, false, true },
+            { "1. System Info     >",   DEBUGGER_MENU_MAX,           MENU_PAGE_SYS,  false, false, true,  INFO_TYPE_SYS },
+            { "2. Screen Rotate 180",   DEBUGGER_OPT_SCREEN_ROTATE,  MENU_PAGE_SYS,  false, false, false, INFO_TYPE_NONE },
+            { "3. Backlight Cycle",     DEBUGGER_OPT_BACKLIGHT_CYCLE,MENU_PAGE_SYS,  false, false, false, INFO_TYPE_NONE },
+            { "4. Enter Download Mode", DEBUGGER_OPT_DOWNLOAD_MODE,  MENU_PAGE_SYS,  false, false, false, INFO_TYPE_NONE },
+            { "5. Factory Reset NVS",   DEBUGGER_OPT_FACTORY_RESET,  MENU_PAGE_SYS,  false, false, false, INFO_TYPE_NONE },
+            { "6. System Reboot",       DEBUGGER_OPT_REBOOT,         MENU_PAGE_SYS,  false, false, false, INFO_TYPE_NONE },
+            { "< Back to Main Menu",    DEBUGGER_MENU_MAX,           MENU_PAGE_MAIN, false, true,  false, INFO_TYPE_NONE },
         }
     },
 };
 
 static menu_page_t s_current_page = MENU_PAGE_MAIN;
+static info_type_t s_current_info_type = INFO_TYPE_NONE;
+static uint8_t s_info_page = 0;
+static bool s_screen_inverted = false;
 
 /* -------------------- 基础绘图函数 -------------------- */
 
@@ -298,14 +314,21 @@ static void render_menu(void)
     fill_rect(0, 0, LCD_WIDTH, 17, COLOR_NAVY);
     draw_string(4, 1, page->title, COLOR_WHITE, COLOR_NAVY);
 
-    // 2. 菜单项列表
+    // 2. 菜单项列表 (支持超过 6 项时的视口平滑滚动)
     fill_rect(0, 17, LCD_WIDTH, LCD_HEIGHT - 17 - 18, COLOR_BLACK);
 
     int start_y = 19;
     int line_h = 16;
-    for (int i = 0; i < page->count; i++) {
+    int max_visible = 6;
+    int scroll_top = 0;
+    if (s_menu_cursor >= max_visible) {
+        scroll_top = s_menu_cursor - max_visible + 1;
+    }
+
+    for (int i = 0; i < max_visible && (scroll_top + i) < page->count; i++) {
+        int idx = scroll_top + i;
         int item_y = start_y + i * line_h;
-        bool is_selected = (i == s_menu_cursor);
+        bool is_selected = (idx == s_menu_cursor);
         uint16_t bg_color = is_selected ? COLOR_DARKCYAN : COLOR_BLACK;
         uint16_t fg_color = is_selected ? COLOR_WHITE : COLOR_LIGHTGREY;
 
@@ -314,8 +337,8 @@ static void render_menu(void)
         }
 
         char buf[36];
-        bool is_active_mode = (s_current_page == MENU_PAGE_USB && page->items[i].action == s_current_mode);
-        snprintf(buf, sizeof(buf), "%c%s%s", is_selected ? '>' : ' ', page->items[i].label, is_active_mode ? " *" : "");
+        bool is_active_mode = (s_current_page == MENU_PAGE_USB && page->items[idx].action == s_current_mode);
+        snprintf(buf, sizeof(buf), "%c%s%s", is_selected ? '>' : ' ', page->items[idx].label, is_active_mode ? " *" : "");
         draw_string(4, item_y, buf, fg_color, bg_color);
     }
 
@@ -328,8 +351,172 @@ static void render_menu(void)
         draw_progress_bar(100, LCD_HEIGHT - 15, 134, 13, s_charging_progress, COLOR_ORANGE, COLOR_DARKGREY, COLOR_WHITE);
     } else {
         fill_rect(0, LCD_HEIGHT - 18, LCD_WIDTH, 18, COLOR_DARKGREY);
-        const char *hint = page->items[s_menu_cursor].is_submenu ? "[Hold >1.5s to Enter]" : "[Hold >1.5s to Select]";
+        const char *hint = page->items[s_menu_cursor].is_submenu ? "[Hold >1.5s to Enter]" :
+                           page->items[s_menu_cursor].is_info ?    "[Hold >1.5s to View Info]" :
+                                                                    "[Hold >1.5s to Select]";
         draw_string(6, LCD_HEIGHT - 16, hint, COLOR_CYAN, COLOR_DARKGREY);
+    }
+}
+
+static void render_info(void)
+{
+    fill_rect(0, 0, LCD_WIDTH, LCD_HEIGHT, COLOR_BLACK);
+
+    char title[36];
+    char line[42];
+
+    if (s_current_info_type == INFO_TYPE_TF) {
+        // --- TF CARD INFO ---
+        if (s_info_page == 0) {
+            snprintf(title, sizeof(title), "TF STORAGE (1/2)");
+            fill_rect(0, 0, LCD_WIDTH, 17, COLOR_NAVY);
+            draw_string(4, 1, title, COLOR_YELLOW, COLOR_NAVY);
+
+            if (s_status_data.sd_mounted) {
+                draw_string(6, 21, "Status   : MOUNTED (FATFS)", COLOR_GREEN, COLOR_BLACK);
+                snprintf(line, sizeof(line), "Capacity : %lu MB (%.1f GB)",
+                         (unsigned long)s_status_data.sd_total_mb,
+                         (double)s_status_data.sd_total_mb / 1024.0);
+                draw_string(6, 37, line, COLOR_WHITE, COLOR_BLACK);
+
+                uint32_t used_mb = (s_status_data.sd_total_mb >= s_status_data.sd_free_mb) ?
+                                   (s_status_data.sd_total_mb - s_status_data.sd_free_mb) : 0;
+                snprintf(line, sizeof(line), "Used/Free: %lu MB / %lu MB",
+                         (unsigned long)used_mb, (unsigned long)s_status_data.sd_free_mb);
+                draw_string(6, 53, line, COLOR_CYAN, COLOR_BLACK);
+
+                draw_string(6, 69, "Bus Mode : 4-bit SDMMC @ 40MHz", COLOR_LIGHTGREY, COLOR_BLACK);
+                draw_string(6, 85, "Mount    : /sdcard (Slot 1)", COLOR_LIGHTGREY, COLOR_BLACK);
+                draw_string(6, 101, "Filesys  : FAT32 LFN Enabled", COLOR_DARKCYAN, COLOR_BLACK);
+            } else {
+                draw_string(6, 21, "Status   : NO CARD INSERTED", COLOR_RED, COLOR_BLACK);
+                draw_string(6, 42, "Insert MicroSD card into", COLOR_LIGHTGREY, COLOR_BLACK);
+                draw_string(6, 58, "the slot to enable logging.", COLOR_LIGHTGREY, COLOR_BLACK);
+            }
+        } else {
+            snprintf(title, sizeof(title), "TF LOGGER (2/2)");
+            fill_rect(0, 0, LCD_WIDTH, 17, COLOR_NAVY);
+            draw_string(4, 1, title, COLOR_YELLOW, COLOR_NAVY);
+
+            snprintf(line, sizeof(line), "Session  : #%03lu (Active)", (unsigned long)s_status_data.sd_session_id);
+            draw_string(6, 21, line, COLOR_MAGENTA, COLOR_BLACK);
+
+            snprintf(line, sizeof(line), "Log File : session_%03lu.log", (unsigned long)s_status_data.sd_session_id);
+            draw_string(6, 37, line, COLOR_WHITE, COLOR_BLACK);
+
+            snprintf(line, sizeof(line), "Logged   : %lu Bytes", (unsigned long)s_status_data.sd_file_bytes);
+            draw_string(6, 53, line, COLOR_CYAN, COLOR_BLACK);
+
+            draw_string(6, 69, "Capture  : Host TX + Target RX", COLOR_LIGHTGREY, COLOR_BLACK);
+            draw_string(6, 85, "Flush Int: 300 ms (Auto-sync)", COLOR_LIGHTGREY, COLOR_BLACK);
+            draw_string(6, 101, "Folder   : /sdcard/logs/", COLOR_DARKCYAN, COLOR_BLACK);
+        }
+    } else if (s_current_info_type == INFO_TYPE_WIFI) {
+        // --- WI-FI INFO ---
+        if (s_info_page == 0) {
+            snprintf(title, sizeof(title), "WI-FI STA (1/2)");
+            fill_rect(0, 0, LCD_WIDTH, 17, COLOR_NAVY);
+            draw_string(4, 1, title, COLOR_YELLOW, COLOR_NAVY);
+
+            const char *st_txt = "AP PORTAL";
+            uint16_t st_color = COLOR_YELLOW;
+            if (s_status_data.wifi_status == UI_WIFI_STATUS_ONLINE) {
+                st_txt = "STA ONLINE";
+                st_color = COLOR_GREEN;
+            } else if (s_status_data.wifi_status == UI_WIFI_STATUS_CONNECTING) {
+                st_txt = "CONNECTING...";
+                st_color = COLOR_ORANGE;
+            } else if (s_status_data.wifi_status == UI_WIFI_STATUS_FALLBACK) {
+                st_txt = "FALLBACK AP";
+                st_color = COLOR_RED;
+            }
+            snprintf(line, sizeof(line), "State    : %s", st_txt);
+            draw_string(6, 21, line, st_color, COLOR_BLACK);
+
+            snprintf(line, sizeof(line), "SSID     : %.20s", s_status_data.wifi_ssid[0] ? s_status_data.wifi_ssid : "None");
+            draw_string(6, 37, line, COLOR_CYAN, COLOR_BLACK);
+
+            snprintf(line, sizeof(line), "Host IP  : %s", s_status_data.wifi_ip[0] ? s_status_data.wifi_ip : "--");
+            draw_string(6, 53, line, COLOR_WHITE, COLOR_BLACK);
+
+            snprintf(line, sizeof(line), "Gateway  : %s", s_status_data.sta_gw[0] ? s_status_data.sta_gw : "--");
+            draw_string(6, 69, line, COLOR_LIGHTGREY, COLOR_BLACK);
+
+            snprintf(line, sizeof(line), "Target IP: %s (usb0)", s_status_data.target_ip[0] ? s_status_data.target_ip : "192.168.4.2");
+            draw_string(6, 85, line, COLOR_GREEN, COLOR_BLACK);
+
+            draw_string(6, 101, "Link     : CDC-NCM 12Mbps", COLOR_DARKCYAN, COLOR_BLACK);
+        } else {
+            snprintf(title, sizeof(title), "WI-FI AP & RF (2/2)");
+            fill_rect(0, 0, LCD_WIDTH, 17, COLOR_NAVY);
+            draw_string(4, 1, title, COLOR_YELLOW, COLOR_NAVY);
+
+            snprintf(line, sizeof(line), "AP SSID  : %.20s", s_status_data.ap_ssid[0] ? s_status_data.ap_ssid : "GEEK-Debugger");
+            draw_string(6, 21, line, COLOR_CYAN, COLOR_BLACK);
+
+            snprintf(line, sizeof(line), "Portal IP: %s", s_status_data.ap_ip[0] ? s_status_data.ap_ip : "192.168.4.1");
+            draw_string(6, 37, line, COLOR_WHITE, COLOR_BLACK);
+
+            snprintf(line, sizeof(line), "Channel  : CH %d (2.412 GHz)", s_status_data.wifi_channel ? s_status_data.wifi_channel : 1);
+            draw_string(6, 53, line, COLOR_ORANGE, COLOR_BLACK);
+
+            snprintf(line, sizeof(line), "MAC Addr : %02X:%02X:%02X:%02X:%02X:%02X",
+                     s_status_data.mac_addr[0], s_status_data.mac_addr[1], s_status_data.mac_addr[2],
+                     s_status_data.mac_addr[3], s_status_data.mac_addr[4], s_status_data.mac_addr[5]);
+            draw_string(6, 69, line, COLOR_LIGHTGREY, COLOR_BLACK);
+
+            draw_string(6, 85, "Auth     : WPA2-PSK / Open", COLOR_LIGHTGREY, COLOR_BLACK);
+            draw_string(6, 101, "URL      : http://192.168.4.1", COLOR_GREEN, COLOR_BLACK);
+        }
+    } else {
+        // --- SYSTEM INFO ---
+        if (s_info_page == 0) {
+            snprintf(title, sizeof(title), "SYS HARDWARE (1/2)");
+            fill_rect(0, 0, LCD_WIDTH, 17, COLOR_NAVY);
+            draw_string(4, 1, title, COLOR_YELLOW, COLOR_NAVY);
+
+            draw_string(6, 21, "MCU      : ESP32-S3 (Dual 240M)", COLOR_CYAN, COLOR_BLACK);
+            draw_string(6, 37, "SRAM/PSRAM: 512KB + 2MB Quad", COLOR_WHITE, COLOR_BLACK);
+
+            snprintf(line, sizeof(line), "Free Heap: %lu KB (Internal)", (unsigned long)s_status_data.free_heap_kb);
+            draw_string(6, 53, line, COLOR_GREEN, COLOR_BLACK);
+
+            snprintf(line, sizeof(line), "Min Heap : %lu KB", (unsigned long)s_status_data.min_heap_kb);
+            draw_string(6, 69, line, COLOR_LIGHTGREY, COLOR_BLACK);
+
+            uint32_t s = s_status_data.uptime_sec;
+            snprintf(line, sizeof(line), "Uptime   : %02lu:%02lu:%02lu",
+                     (unsigned long)(s / 3600), (unsigned long)((s % 3600) / 60), (unsigned long)(s % 60));
+            draw_string(6, 85, line, COLOR_YELLOW, COLOR_BLACK);
+
+            draw_string(6, 101, "Power    : USB 5V VBUS Good", COLOR_DARKCYAN, COLOR_BLACK);
+        } else {
+            snprintf(title, sizeof(title), "SYS FIRMWARE (2/2)");
+            fill_rect(0, 0, LCD_WIDTH, 17, COLOR_NAVY);
+            draw_string(4, 1, title, COLOR_YELLOW, COLOR_NAVY);
+
+            draw_string(6, 21, "Firmware : v1.2.0-composite", COLOR_CYAN, COLOR_BLACK);
+            draw_string(6, 37, "Flash    : 16 MB (App: 4 MB)", COLOR_WHITE, COLOR_BLACK);
+
+            snprintf(line, sizeof(line), "ScreenRot: %s", s_screen_inverted ? "180 Deg Inverted" : "0 Deg Normal");
+            draw_string(6, 53, line, COLOR_ORANGE, COLOR_BLACK);
+
+            draw_string(6, 69, "TinyUSB  : CDC-ACM + CDC-NCM", COLOR_LIGHTGREY, COLOR_BLACK);
+            draw_string(6, 85, "1200-baud: DFU Auto-Trigger", COLOR_LIGHTGREY, COLOR_BLACK);
+            draw_string(6, 101, "Tool     : GEEK Debug Console", COLOR_GREEN, COLOR_BLACK);
+        }
+    }
+
+    // 3. 底部操作栏与蓄力返回进度
+    fill_rect(0, LCD_HEIGHT - 18, LCD_WIDTH, 18, COLOR_BLACK);
+    if (s_charging_progress > 0) {
+        char prog_str[16];
+        snprintf(prog_str, sizeof(prog_str), "Hold Back:%2d%%", s_charging_progress);
+        draw_string(4, LCD_HEIGHT - 16, prog_str, COLOR_YELLOW, COLOR_BLACK);
+        draw_progress_bar(110, LCD_HEIGHT - 15, 124, 13, s_charging_progress, COLOR_RED, COLOR_DARKGREY, COLOR_WHITE);
+    } else {
+        fill_rect(0, LCD_HEIGHT - 18, LCD_WIDTH, 18, COLOR_DARKGREY);
+        draw_string(6, LCD_HEIGHT - 16, "[Short:Next Page | Hold:Back]", COLOR_CYAN, COLOR_DARKGREY);
     }
 }
 
@@ -359,6 +546,10 @@ static void render_applying(void)
         draw_string(26, 50, "Rebuilding FATFS...", COLOR_WHITE, COLOR_BLACK);
         draw_string(30, 68, "All files erased", COLOR_YELLOW, COLOR_BLACK);
         draw_progress_bar(20, 88, LCD_WIDTH - 40, 8, 100, COLOR_RED, COLOR_BLACK, COLOR_WHITE);
+    } else if (s_current_mode == DEBUGGER_OPT_SCREEN_ROTATE) {
+        draw_string(32, 28, "SCREEN ROTATION", COLOR_YELLOW, COLOR_BLACK);
+        draw_string(24, 50, s_screen_inverted ? "Orientation: Inverted 180*" : "Orientation: Normal 0*", COLOR_WHITE, COLOR_BLACK);
+        draw_progress_bar(20, 80, LCD_WIDTH - 40, 8, 100, COLOR_CYAN, COLOR_BLACK, COLOR_WHITE);
     } else if (s_current_mode == DEBUGGER_OPT_BACKLIGHT_CYCLE) {
         draw_string(32, 28, "LCD BACKLIGHT", COLOR_YELLOW, COLOR_BLACK);
         draw_string(26, 50, "Brightness Adjusted", COLOR_WHITE, COLOR_BLACK);
@@ -399,14 +590,15 @@ static void ui_task(void *pvParameters)
         int64_t now_ms = esp_timer_get_time() / 1000LL;
 
         if (xSemaphoreTake(s_ui_mutex, pdMS_TO_TICKS(50)) == pdTRUE) {
-            // 超时检测：如果处于菜单页面，且 8 秒无任何操作，自动退回 Dashboard
-            if (s_current_view == UI_VIEW_MENU && s_charging_progress == 0) {
-                if (now_ms - s_last_action_time_ms > 8000) {
+            // 超时检测：如果处于菜单页面或详情页面，且 12 秒无任何操作，自动退回 Dashboard
+            if ((s_current_view == UI_VIEW_MENU || s_current_view == UI_VIEW_INFO) && s_charging_progress == 0) {
+                if (now_ms - s_last_action_time_ms > 12000) {
                     s_current_view = UI_VIEW_DASHBOARD;
                     s_current_page = MENU_PAGE_MAIN;
                     s_menu_cursor = 0;
+                    s_info_page = 0;
                     s_need_refresh = true;
-                    ESP_LOGI(TAG, "Menu timeout, returning to dashboard");
+                    ESP_LOGI(TAG, "Menu/Info timeout, returning to dashboard");
                 }
             }
 
@@ -422,6 +614,9 @@ static void ui_task(void *pvParameters)
                     break;
                 case UI_VIEW_APPLYING:
                     render_applying();
+                    break;
+                case UI_VIEW_INFO:
+                    render_info();
                     break;
                 }
 
@@ -456,6 +651,9 @@ void display_ui_on_short_press(void)
             if (max_cnt > 0) {
                 s_menu_cursor = (s_menu_cursor + 1) % max_cnt;
             }
+        } else if (s_current_view == UI_VIEW_INFO) {
+            // Info 详情页下：单击切换下一页
+            s_info_page = (s_info_page + 1) % 2;
         }
 
         s_need_refresh = true;
@@ -498,6 +696,16 @@ void display_ui_on_long_press_confirm(void)
 
     if (xSemaphoreTake(s_ui_mutex, pdMS_TO_TICKS(50)) == pdTRUE) {
         s_charging_progress = 0;
+
+        if (s_current_view == UI_VIEW_INFO) {
+            // 在 Info 详情页长按：返回上一级菜单
+            s_current_view = UI_VIEW_MENU;
+            s_info_page = 0;
+            s_need_refresh = true;
+            xSemaphoreGive(s_ui_mutex);
+            return;
+        }
+
         const menu_item_def_t *item = &s_menus[s_current_page].items[s_menu_cursor];
 
         if (item->is_back) {
@@ -515,6 +723,14 @@ void display_ui_on_long_press_confirm(void)
             // 进入二级子菜单
             s_current_page = item->next_page;
             s_menu_cursor = 0;
+            s_need_refresh = true;
+            xSemaphoreGive(s_ui_mutex);
+            return;
+        } else if (item->is_info) {
+            // 进入 Info 详情页
+            s_current_view = UI_VIEW_INFO;
+            s_current_info_type = item->info_type;
+            s_info_page = 0;
             s_need_refresh = true;
             xSemaphoreGive(s_ui_mutex);
             return;
@@ -577,6 +793,36 @@ void display_ui_set_backlight(uint8_t percent)
         ledc_set_duty(LCD_LEDC_MODE, LCD_LEDC_CHANNEL, duty);
         ledc_update_duty(LCD_LEDC_MODE, LCD_LEDC_CHANNEL);
     }
+}
+
+void display_ui_set_rotation(bool inverted)
+{
+    if (xSemaphoreTake(s_ui_mutex, pdMS_TO_TICKS(50)) == pdTRUE) {
+        s_screen_inverted = inverted;
+        if (s_panel_handle) {
+            if (!s_screen_inverted) {
+                esp_lcd_panel_swap_xy(s_panel_handle, true);
+                esp_lcd_panel_mirror(s_panel_handle, false, true);
+                esp_lcd_panel_set_gap(s_panel_handle, LCD_GAP_X, LCD_GAP_Y);
+            } else {
+                esp_lcd_panel_swap_xy(s_panel_handle, true);
+                esp_lcd_panel_mirror(s_panel_handle, true, false);
+                esp_lcd_panel_set_gap(s_panel_handle, LCD_GAP_X, 52);
+            }
+        }
+        s_need_refresh = true;
+        xSemaphoreGive(s_ui_mutex);
+    }
+}
+
+bool display_ui_get_rotation(void)
+{
+    return s_screen_inverted;
+}
+
+void display_ui_toggle_rotation(void)
+{
+    display_ui_set_rotation(!s_screen_inverted);
 }
 
 esp_err_t display_ui_init(const display_ui_config_t *config)

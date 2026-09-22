@@ -4,6 +4,8 @@
 #include "freertos/task.h"
 #include "esp_log.h"
 #include "esp_system.h"
+#include "esp_timer.h"
+#include "esp_mac.h"
 #include "nvs_flash.h"
 
 #include "button_ctrl.h"
@@ -149,6 +151,11 @@ static void app_mode_apply_handler(debugger_mode_t mode, void *user_ctx)
         sd_logger_format();
         break;
 
+    case DEBUGGER_OPT_SCREEN_ROTATE:
+        ESP_LOGI(TAG, "Action: Toggling Screen Orientation (0 deg <-> 180 deg)");
+        display_ui_toggle_rotation();
+        break;
+
     case DEBUGGER_OPT_BACKLIGHT_CYCLE: {
         static uint8_t s_brightness_idx = 3;
         static const uint8_t s_levels[] = { 25, 50, 75, 100 };
@@ -193,6 +200,14 @@ static ui_status_data_t s_current_ui_status = {
     .sd_free_mb = 0,
     .sd_session_id = 0,
     .sd_file_bytes = 0,
+    .free_heap_kb = 0,
+    .min_heap_kb = 0,
+    .uptime_sec = 0,
+    .sta_gw = "192.168.1.1",
+    .ap_ssid = "GEEK-Debugger",
+    .ap_ip = "192.168.4.1",
+    .wifi_channel = 1,
+    .mac_addr = {0},
 };
 
 static void app_wifi_state_handler(net_wifi_state_t state, const char *ssid, const char *ip_str, void *user_ctx)
@@ -202,6 +217,9 @@ static void app_wifi_state_handler(net_wifi_state_t state, const char *ssid, con
         s_current_ui_status.wifi_status = UI_WIFI_STATUS_AP;
         strcpy(s_current_ui_status.wifi_ssid, "GEEK-Debugger");
         strcpy(s_current_ui_status.wifi_ip, "192.168.4.1");
+        strcpy(s_current_ui_status.ap_ssid, "GEEK-Debugger");
+        strcpy(s_current_ui_status.ap_ip, "192.168.4.1");
+        s_current_ui_status.wifi_channel = 1;
         ESP_LOGI(TAG, "UI Updated: AP Portal Ready (192.168.4.1)");
         break;
 
@@ -215,12 +233,18 @@ static void app_wifi_state_handler(net_wifi_state_t state, const char *ssid, con
         s_current_ui_status.wifi_status = UI_WIFI_STATUS_ONLINE;
         if (ssid) strncpy(s_current_ui_status.wifi_ssid, ssid, sizeof(s_current_ui_status.wifi_ssid) - 1);
         if (ip_str) strncpy(s_current_ui_status.wifi_ip, ip_str, sizeof(s_current_ui_status.wifi_ip) - 1);
+        strcpy(s_current_ui_status.ap_ssid, "GEEK-Debugger");
+        strcpy(s_current_ui_status.ap_ip, "192.168.4.1");
+        s_current_ui_status.wifi_channel = 1;
         ESP_LOGI(TAG, "UI Updated: Connected! IP=%s", s_current_ui_status.wifi_ip);
         break;
 
     case NET_WIFI_STATE_FALLBACK_AP:
         s_current_ui_status.wifi_status = UI_WIFI_STATUS_FALLBACK;
         strcpy(s_current_ui_status.wifi_ip, "192.168.4.1");
+        strcpy(s_current_ui_status.ap_ssid, "GEEK-Debugger");
+        strcpy(s_current_ui_status.ap_ip, "192.168.4.1");
+        s_current_ui_status.wifi_channel = 1;
         ESP_LOGW(TAG, "UI Updated: Fallback to AP!");
         break;
     }
@@ -247,6 +271,12 @@ static void status_monitor_task(void *pvParameters)
         s_current_ui_status.sd_free_mb = sd_st.free_mb;
         s_current_ui_status.sd_session_id = sd_st.current_session_id;
         s_current_ui_status.sd_file_bytes = sd_st.current_file_bytes;
+
+        // 系统资源监测
+        s_current_ui_status.free_heap_kb = esp_get_free_heap_size() / 1024;
+        s_current_ui_status.min_heap_kb = esp_get_minimum_free_heap_size() / 1024;
+        s_current_ui_status.uptime_sec = (uint32_t)(esp_timer_get_time() / 1000000LL);
+        esp_read_mac(s_current_ui_status.mac_addr, ESP_MAC_WIFI_STA);
 
         display_ui_update_status(&s_current_ui_status);
         vTaskDelay(pdMS_TO_TICKS(1000));

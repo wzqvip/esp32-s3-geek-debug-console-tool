@@ -513,7 +513,10 @@ static esp_err_t http_post_config_display_handler(httpd_req_t *req)
     int timeout = parse_json_int(buf, "timeout_s", -1);
     if (timeout >= 0) s_sys_cfg.display_timeout_s = (uint16_t)timeout;
     int rot = parse_json_int(buf, "rotation", -1);
-    if (rot >= 0) s_sys_cfg.display_rotation = (uint8_t)rot;
+    if (rot >= 0) {
+        s_sys_cfg.display_rotation = (uint8_t)rot;
+        display_ui_set_rotation(rot == 2);
+    }
 
     net_bridge_save_sys_config(&s_sys_cfg);
 
