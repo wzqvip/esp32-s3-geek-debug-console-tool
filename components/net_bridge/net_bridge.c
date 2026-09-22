@@ -2,6 +2,7 @@
 #include "wifi_portal_html.h"
 #include "sd_logger.h"
 #include "display_ui.h"
+#include "usb_manager.h"
 
 #include <string.h>
 #include <stdio.h>
@@ -821,6 +822,104 @@ static esp_err_t http_post_logs_format_handler(httpd_req_t *req)
     return httpd_resp_send(req, resp, HTTPD_RESP_USE_STRLEN);
 }
 
+/* -------------------- USB HID 模拟键鼠 Web 接口 -------------------- */
+
+static esp_err_t http_post_hid_keyboard_handler(httpd_req_t *req)
+{
+    char buf[512];
+    int ret = httpd_req_recv(req, buf, sizeof(buf) - 1);
+    if (ret <= 0) return ESP_FAIL;
+    buf[ret] = '\0';
+
+    char action[32] = {0};
+    parse_json_str(buf, "action", action, sizeof(action));
+
+    if (strcmp(action, "type") == 0) {
+        char text[384] = {0};
+        parse_json_str(buf, "text", text, sizeof(text));
+        if (text[0] != '\0') {
+            usb_hid_type_string(text);
+        }
+    } else if (strcmp(action, "shortcut") == 0) {
+        char key[32] = {0};
+        parse_json_str(buf, "key", key, sizeof(key));
+        if (strcmp(key, "enter") == 0) {
+            usb_hid_send_keystroke(0, 0x28);
+        } else if (strcmp(key, "esc") == 0) {
+            usb_hid_send_keystroke(0, 0x29);
+        } else if (strcmp(key, "backspace") == 0) {
+            usb_hid_send_keystroke(0, 0x2A);
+        } else if (strcmp(key, "tab") == 0) {
+            usb_hid_send_keystroke(0, 0x2B);
+        } else if (strcmp(key, "space") == 0) {
+            usb_hid_send_keystroke(0, 0x2C);
+        } else if (strcmp(key, "win") == 0 || strcmp(key, "gui") == 0) {
+            usb_hid_send_keystroke(0x08, 0xE3); // GUI / Win key
+        } else if (strcmp(key, "ctrl_c") == 0) {
+            usb_hid_send_keystroke(0x01, 0x06); // Ctrl + C
+        } else if (strcmp(key, "ctrl_v") == 0) {
+            usb_hid_send_keystroke(0x01, 0x19); // Ctrl + V
+        } else if (strcmp(key, "ctrl_a") == 0) {
+            usb_hid_send_keystroke(0x01, 0x04); // Ctrl + A
+        } else if (strcmp(key, "ctrl_z") == 0) {
+            usb_hid_send_keystroke(0x01, 0x1D); // Ctrl + Z
+        } else if (strcmp(key, "ctrl_alt_del") == 0) {
+            usb_hid_send_keystroke(0x01 | 0x04, 0x4C); // Ctrl + Alt + Delete
+        } else if (strcmp(key, "up") == 0) {
+            usb_hid_send_keystroke(0, 0x52);
+        } else if (strcmp(key, "down") == 0) {
+            usb_hid_send_keystroke(0, 0x51);
+        } else if (strcmp(key, "left") == 0) {
+            usb_hid_send_keystroke(0, 0x50);
+        } else if (strcmp(key, "right") == 0) {
+            usb_hid_send_keystroke(0, 0x4F);
+        }
+    } else if (strcmp(action, "press") == 0) {
+        int mod = parse_json_int(buf, "modifier", 0);
+        int kc = parse_json_int(buf, "keycode", 0);
+        if (kc > 0) {
+            usb_hid_send_keystroke((uint8_t)mod, (uint8_t)kc);
+        }
+    }
+
+    httpd_resp_set_type(req, "application/json");
+    return httpd_resp_send(req, "{\"success\":true}", HTTPD_RESP_USE_STRLEN);
+}
+
+static esp_err_t http_post_hid_mouse_handler(httpd_req_t *req)
+{
+    char buf[128];
+    int ret = httpd_req_recv(req, buf, sizeof(buf) - 1);
+    if (ret <= 0) return ESP_FAIL;
+    buf[ret] = '\0';
+
+    char click[16] = {0};
+    parse_json_str(buf, "click", click, sizeof(click));
+
+    if (click[0] != '\0') {
+        if (strcmp(click, "left") == 0) {
+            usb_hid_mouse_click(0x01);
+        } else if (strcmp(click, "right") == 0) {
+            usb_hid_mouse_click(0x02);
+        } else if (strcmp(click, "middle") == 0) {
+            usb_hid_mouse_click(0x04);
+        } else if (strcmp(click, "double") == 0) {
+            usb_hid_mouse_click(0x01);
+            vTaskDelay(pdMS_TO_TICKS(50));
+            usb_hid_mouse_click(0x01);
+        }
+    } else {
+        int dx = parse_json_int(buf, "dx", 0);
+        int dy = parse_json_int(buf, "dy", 0);
+        int btn = parse_json_int(buf, "buttons", 0);
+        int wheel = parse_json_int(buf, "wheel", 0);
+        usb_hid_send_mouse((uint8_t)btn, (int8_t)dx, (int8_t)dy, (int8_t)wheel, 0);
+    }
+
+    httpd_resp_set_type(req, "application/json");
+    return httpd_resp_send(req, "{\"success\":true}", HTTPD_RESP_USE_STRLEN);
+}
+
 /* -------------------- 启动 Web 服务器 -------------------- */
 
 static void start_http_server(void)
@@ -828,7 +927,7 @@ static void start_http_server(void)
     if (s_http_server) return;
 
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
-    config.max_uri_handlers = 24;
+    config.max_uri_handlers = 30;
     config.stack_size = 9216;
 
     if (httpd_start(&s_http_server, &config) == ESP_OK) {
@@ -895,6 +994,13 @@ static void start_http_server(void)
 
         httpd_uri_t uri_logs_format = { .uri = "/api/logs/format", .method = HTTP_POST, .handler = http_post_logs_format_handler };
         httpd_register_uri_handler(s_http_server, &uri_logs_format);
+
+        // USB HID 键鼠控制接口
+        httpd_uri_t uri_hid_kb = { .uri = "/api/hid/keyboard", .method = HTTP_POST, .handler = http_post_hid_keyboard_handler };
+        httpd_register_uri_handler(s_http_server, &uri_hid_kb);
+
+        httpd_uri_t uri_hid_mouse = { .uri = "/api/hid/mouse", .method = HTTP_POST, .handler = http_post_hid_mouse_handler };
+        httpd_register_uri_handler(s_http_server, &uri_hid_mouse);
 
         ESP_LOGI(TAG, "Full-Featured Web Console Server started on port %d", config.server_port);
     }

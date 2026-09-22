@@ -57,7 +57,12 @@ Made by Gemini 3.8 Flash Medium with me.
 - **Full Wi-Fi Control (STA & AP)**: Wi-Fi signal scanner with RSSI bars, DHCP or Static IP (custom IP, Mask, Gateway, DNS), auto-reconnect, and custom AP settings (SSID, WPA2 password, channel 1-13, hidden SSID).
 - **Interactive Web Serial Terminal**: Built-in browser terminal console! Send commands directly to Target Linux, inject `Ctrl+C` interrupt signals, execute with `Enter`, clear screen, and view real-time streaming target responses without needing PuTTY.
 - **Hardware PWM LCD Dimming**: Smooth 10% - 100% brightness control driven by ESP32-S3 hardware LEDC timer and PWM channel, with configurable screen sleep timeouts (Never, 30s, 1m, 5m).
-- **Device Diagnostics & Actions**: View live CPU load, 16MB Flash usage, Free Heap memory monitoring, Uptime, and trigger one-click Reboot, ROM Download Mode, or Factory Reset from anywhere on the local network.
+### 8. USB HID Keyboard & Mouse Emulation (Web IP-KVM)
+
+- **Triple-Composite USB Device**: Simulates a standard driverless USB HID Keyboard and Mouse concurrently with the CDC-ACM serial console and CDC-NCM Ethernet interface.
+- **Web Virtual Touchpad**: Smooth pointer tracking area supporting mobile touch-drag or laptop mouse-drag, with adjustable sensitivity (0.5x - 3.0x), physical left/middle/right mouse buttons, and scroll wheel controls.
+- **Web Typing Stream Injector**: Send long shell commands, passwords, or code snippets with one click; automatically converts ASCII text into USB HID keystrokes using a non-blocking background streaming task.
+- **System Hotkeys & Key Forwarding**: One-click injection of essential system shortcuts (`Enter`, `Esc`, `Tab`, `Backspace`, `Win Key`, `Ctrl+C`, `Ctrl+V`, `Ctrl+A`, `Ctrl+Z`, `Ctrl+Alt+Del 🚨`, and Arrow keys), plus optional physical keyboard forwarding straight to the target computer.
 
 ---
 

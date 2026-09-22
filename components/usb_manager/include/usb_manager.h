@@ -90,6 +90,59 @@ usb_mode_t usb_manager_get_current_mode(void);
  */
 void usb_manager_disconnect(void);
 
+/* -------------------- USB HID 模拟键鼠接口 -------------------- */
+
+/**
+ * @brief 查询 USB HID 是否已连接就绪
+ */
+bool usb_hid_is_ready(void);
+
+/**
+ * @brief 发送完整键盘状态报告
+ *
+ * @param modifier 修饰键掩码 (KEYBOARD_MODIFIER_*)
+ * @param keycodes 最多 6 个同时按下的按键 HID 键码 (0 表示无按键)
+ * @return esp_err_t ESP_OK 成功
+ */
+esp_err_t usb_hid_send_keyboard(uint8_t modifier, const uint8_t keycodes[6]);
+
+/**
+ * @brief 发送单个按键打击 (自动按下并延迟释放)
+ *
+ * @param modifier 修饰键掩码
+ * @param keycode 目标按键 HID 键码
+ * @return esp_err_t ESP_OK 成功
+ */
+esp_err_t usb_hid_send_keystroke(uint8_t modifier, uint8_t keycode);
+
+/**
+ * @brief 模拟打字输入 ASCII 字符串 (自动转换为按键与 Shift 组合)
+ *
+ * @param str 要打字的字符串
+ * @return esp_err_t ESP_OK 成功
+ */
+esp_err_t usb_hid_type_string(const char *str);
+
+/**
+ * @brief 发送鼠标相对移动、滚轮与按键状态
+ *
+ * @param buttons 鼠标按键掩码 (BIT0: 左键, BIT1: 右键, BIT2: 中键)
+ * @param dx X 轴相对位移 (-127 ~ 127)
+ * @param dy Y 轴相对位移 (-127 ~ 127)
+ * @param wheel 垂直滚轮位移 (-127 ~ 127)
+ * @param pan 水平滚轮位移 (-127 ~ 127)
+ * @return esp_err_t ESP_OK 成功
+ */
+esp_err_t usb_hid_send_mouse(uint8_t buttons, int8_t dx, int8_t dy, int8_t wheel, int8_t pan);
+
+/**
+ * @brief 触发一次鼠标按键点击 (按下并释放)
+ *
+ * @param button 鼠标按键掩码
+ * @return esp_err_t ESP_OK 成功
+ */
+esp_err_t usb_hid_mouse_click(uint8_t button);
+
 #ifdef __cplusplus
 }
 #endif
