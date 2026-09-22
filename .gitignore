@@ -1,0 +1,13 @@
+# ESP-IDF Build artifacts
+build/
+sdkconfig
+sdkconfig.old
+
+# Dependencies managed by IDF Component Manager
+managed_components/
+
+# OS and temporary files
+.DS_Store
+Thumbs.db
+*.tmp
+*.bak

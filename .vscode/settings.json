@@ -1,0 +1,15 @@
+{
+    "idf.espIdfPathWin": "C:\\esp\\v6.1\\esp-idf",
+    "idf.toolsPathWin": "C:\\Espressif\\tools",
+    "idf.pythonInstallPath": "C:\\Espressif\\tools\\python\\v6.1\\venv\\Scripts\\python.exe",
+    "idf.portWin": "COM40",
+    "idf.flashType": "UART",
+    "idf.adapterTargetName": "esp32s3",
+    "idf.openOcdConfigs": [
+        "board/esp32s3-builtin.cfg"
+    ],
+    "files.associations": {
+        "*.h": "c",
+        "*.c": "c"
+    }
+}

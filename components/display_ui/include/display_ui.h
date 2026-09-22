@@ -1,0 +1,125 @@
+#pragma once
+
+#include <stdint.h>
+#include <stdbool.h>
+#include "esp_err.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/**
+ * @brief 调试器工作模式定义
+ */
+typedef enum {
+    DEBUGGER_MODE_COMPOSITE = 0,    /*!< 复合模式: CDC-ACM串口 + CDC-NCM网卡 (默认推荐) */
+    DEBUGGER_MODE_PURE_SERIAL,      /*!< 纯串口模式: 仅枚举 CDC-ACM 控制台 */
+    DEBUGGER_MODE_PURE_NET,         /*!< 纯网卡模式: 仅枚举 CDC-NCM 虚拟以太网 */
+    DEBUGGER_OPT_WIFI_TOGGLE,       /*!< Wi-Fi 重置为 AP 配网热点 */
+    DEBUGGER_OPT_DOWNLOAD_MODE,     /*!< 进入 ROM 固件下载模式 (DFU / Bootloader) */
+    DEBUGGER_OPT_REBOOT,            /*!< 系统重启 */
+    DEBUGGER_MENU_MAX
+} debugger_mode_t;
+
+/**
+ * @brief UI 界面模式
+ */
+typedef enum {
+    UI_VIEW_DASHBOARD,              /*!< 仪表盘监控界面 */
+    UI_VIEW_MENU,                   /*!< 菜单选择界面 (短按切换) */
+    UI_VIEW_APPLYING,               /*!< 正在应用配置提示 (长按确认后) */
+} ui_view_t;
+
+/**
+ * @brief UI 界面上的 Wi-Fi 状态枚举
+ */
+typedef enum {
+    UI_WIFI_STATUS_AP = 0,          /*!< AP 配网热点就绪 */
+    UI_WIFI_STATUS_CONNECTING,      /*!< 正在连接目标路由中 */
+    UI_WIFI_STATUS_ONLINE,          /*!< 已连入局域网在线 */
+    UI_WIFI_STATUS_FALLBACK,        /*!< 连接失败，回退至 AP 配网 */
+} ui_wifi_status_t;
+
+/**
+ * @brief 运行时状态数据，供仪表盘显示
+ */
+typedef struct {
+    debugger_mode_t current_mode;
+    ui_wifi_status_t wifi_status;   /*!< 当前 Wi-Fi 状态 */
+    char wifi_ssid[33];             /*!< 当前连接的 SSID 或 AP 名称 */
+    char wifi_ip[20];               /*!< 例如 "192.168.4.1" 或 "192.168.1.x" */
+    char target_ip[20];             /*!< 例如 "192.168.4.2" */
+    uint32_t baud_rate;             /*!< 例如 115200 */
+    bool serial_connected;          /*!< 目标机串口是否打开 */
+    bool net_link_up;               /*!< 虚拟网卡是否 Link Up */
+    uint32_t rx_bytes_sec;          /*!< 接收速率 (Bytes/s) */
+    uint32_t tx_bytes_sec;          /*!< 发送速率 (Bytes/s) */
+} ui_status_data_t;
+
+/**
+ * @brief 模式确认生效回调函数原型
+ */
+typedef void (*ui_mode_apply_cb_t)(debugger_mode_t selected_mode, void *user_ctx);
+
+/**
+ * @brief UI 控制器初始化参数
+ */
+typedef struct {
+    int pin_mosi;                   /*!< ESP32-S3-GEEK: GPIO 11 */
+    int pin_sclk;                   /*!< ESP32-S3-GEEK: GPIO 12 */
+    int pin_cs;                     /*!< ESP32-S3-GEEK: GPIO 10 */
+    int pin_dc;                     /*!< ESP32-S3-GEEK: GPIO 8 */
+    int pin_rst;                    /*!< ESP32-S3-GEEK: GPIO 9 */
+    int pin_bl;                     /*!< ESP32-S3-GEEK: GPIO 7 */
+    debugger_mode_t initial_mode;   /*!< 开机默认模式 */
+    ui_mode_apply_cb_t on_apply;    /*!< 长按确认时的回调 */
+    void *user_ctx;                 /*!< 用户上下文 */
+} display_ui_config_t;
+
+/**
+ * @brief 初始化 ST7789 屏幕并启动 UI 渲染任务
+ *
+ * @param config 配置参数
+ * @return esp_err_t ESP_OK 成功
+ */
+esp_err_t display_ui_init(const display_ui_config_t *config);
+
+/**
+ * @brief 响应按键短按事件 (若在 Dashboard 则唤起菜单；若在 Menu 则循环选择下一项)
+ */
+void display_ui_on_short_press(void);
+
+/**
+ * @brief 响应长按蓄力进度更新 (0 ~ 100)
+ *
+ * @param progress 蓄力百分比
+ */
+void display_ui_on_long_press_tick(uint8_t progress);
+
+/**
+ * @brief 响应长按取消 (用户未蓄满即松手)
+ */
+void display_ui_on_long_press_cancel(void);
+
+/**
+ * @brief 响应长按确认事件 (执行当前选中的菜单项)
+ */
+void display_ui_on_long_press_confirm(void);
+
+/**
+ * @brief 更新运行时仪表盘状态数据
+ *
+ * @param data 状态数据
+ */
+void display_ui_update_status(const ui_status_data_t *data);
+
+/**
+ * @brief 设置屏幕背光亮度
+ *
+ * @param percent 亮度百分比 (0 ~ 100)
+ */
+void display_ui_set_backlight(uint8_t percent);
+
+#ifdef __cplusplus
+}
+#endif
